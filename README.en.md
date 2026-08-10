@@ -14,6 +14,14 @@ Muxio is a local-first personal information capture core. Its first goal is to c
 - Core and Web share a repository but remain independent projects joined only by OpenAPI.
 - Personal data stays local by default, and the service listens on loopback only.
 
+## Why not an existing tool
+
+An RSS reader solves subscriptions, a note plugin solves one source, and a script can get one collection run working. Each is valid on its own, but none provides a unified record substrate across sources: one set of idempotency, versioning, traceability, and run-observability semantics covering every source.
+
+Muxio's first phase builds only that substrate. Higher-level capabilities — search, content understanding, automation — are built on top of it instead of being redone for each new source.
+
+This is also the scope test: a feature is worth building only if it strengthens the substrate.
+
 ## Quick start
 
 Go 1.25 or newer is required.
