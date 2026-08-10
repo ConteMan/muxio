@@ -1,57 +1,55 @@
 # 首期数据模型
 
-本文定义 SQLite 首期最小合同。具体 SQL 由存储 Spec 和只增不改的 migration 落地。
+本文只定义**不变量**：一旦推翻就会波及采集正确性、崩溃恢复或已入库历史数据的规则。字段清单、列类型、索引、取值上限和精确状态枚举属于实现合同，由存储 Spec 与只增不改的 migration 承载。
 
-## 表
+这个分层是刻意的：不变量少而稳定，实现合同可以随真实实现演进，不必每次调参都改 Design。
+
+| 层 | 内容 | 变更方式 |
+|---|---|---|
+| 不变量（本文） | 去重语义、不可变性、事务边界、标识与时间规则 | 需维护者确认，通常伴随新 ADR |
+| 实现合同（Spec + migration） | 精确字段、类型、约束、索引、上限取值 | 随 Spec 演进，已发布 migration 只增不改 |
+
+## 实体职责
 
 ### `sources`
 
-一条记录表示一个已配置采集源：`id`、`name`、`connector_kind`、`config_json`、`checkpoint_json`、`enabled`、`interval_seconds`、`next_run_at`、`last_success_at`、`last_error` 和审计时间。
+一个已配置采集源。承载连接器类型、连接器配置、采集 checkpoint、启用状态、调度间隔和最近一次运行结果。
 
 ### `runs`
 
-一条记录表示一次逻辑采集运行：`id`、`source_id`、`trigger`、`status`、`started_at`、`heartbeat_at`、`finished_at`、计数、尝试次数和最后错误。
+一次逻辑采集运行。承载触发方式、状态、时间点、计数、尝试次数和最后错误，是运行可观测性的事实源。
 
-状态机：
-
-```text
-queued → running → succeeded
-                 → partial
-                 → failed
-                 → canceled
-                 → interrupted
-```
-
-进程启动时，遗留 `running` 必须转为 `interrupted`。只有已有记录成功提交而运行随后失败时使用 `partial`。
+状态集合为 `queued`、`running`、`succeeded`、`partial`、`failed`、`canceled`、`interrupted`。`queued` 与 `running` 是仅有的非终态，终态不可再转换。
 
 ### `captures`
 
-不可变采集记录：`id`、`source_id`、`run_id`、`external_id`、`content_hash`、`title`、`body`、`mime_type`、`canonical_url`、`occurred_at`、`captured_at` 和 `metadata_json`。
-
-唯一约束为 `source_id + external_id + content_hash`：同一版本重复观察不重复写入，内容变化保留新版本和旧版本。
+不可变采集记录。承载来源归属、外部标识、内容哈希、正文、来源链接和时间，是全部读路径的事实源。
 
 ### `captures_fts`
 
-FTS5 索引标题与正文。它是可重建投影，不是事实源。
+FTS5 全文索引。它是可从 `captures` 完整重建的投影，任何时候都不是事实源；重建它不得需要重新采集。
 
 ### `schema_migrations`
 
-记录已应用的顺序迁移。已发布 migration 只增不改；迁移前建立一致性备份。
+已应用迁移的顺序记录。
 
-## 事务不变量
+## 不变量
 
-一次成功提交必须在同一事务中完成：写入或去重 captures、更新运行计数、推进 source checkpoint。任一步失败则不得推进 checkpoint。
+1. **采集记录不可变。** 来源内容变化产生新版本，不修改也不覆盖已有记录。
+2. **去重键是 `source_id + external_id + content_hash`。** 同一版本重复观察不重复写入；内容变化同时保留新旧版本。
+3. **一次成功提交是单个事务。** 写入或去重 captures、更新运行计数、推进 source checkpoint 必须原子完成。
+4. **checkpoint 后置于提交。** 事务中任一步失败都不得推进 checkpoint；宁可重复采集，不可丢失。
+5. **崩溃可恢复。** 进程启动时遗留的 `running` 必须转为 `interrupted`，不得留下悬挂运行。
+6. **`partial` 有精确含义。** 仅用于已有记录成功提交、而运行随后失败的情况；它意味着 checkpoint 可能已部分推进。
+7. **内部 ID 稳定**，不可从标题等可变字段推导。
+8. **`external_id` 由连接器定义**，在同一来源内稳定：文件用规范化相对路径，Feed 优先用 GUID。
+9. **`content_hash` 对规范化后的内容计算**，规范化规则变更等同于一次数据迁移。
+10. **所有持久化与 API 时间使用 RFC3339 UTC。** 时区转换只发生在展示层。
+11. **已发布 migration 只增不改**，迁移前建立一致性备份。
 
-## 标识与时间
+## 首期范围限制
 
-- 内部 ID 必须稳定、不可从可变标题推导。
-- `external_id` 由连接器定义：文件使用规范化相对路径，Feed 优先使用 GUID。
-- `content_hash` 对规范化后的采集内容计算。
-- 所有持久化时间与 API 时间使用 RFC3339 UTC。
-
-## 首期限制
-
-- 正文只保存文本；附件和大型二进制不入库。
-- 单条正文默认上限 5 MiB。
-- 连接器配置首期不得保存凭据。
-- 删除与保留策略在有真实数据量证据后单独设计。
+- 正文只保存文本；附件与大型二进制不入库。
+- 正文大小必须有明确上限，具体取值由存储 Spec 定义。
+- 连接器配置首期不保存凭据。
+- 删除与保留策略在出现真实数据量证据后单独设计。
