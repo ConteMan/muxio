@@ -7,7 +7,8 @@ Muxio 是本地优先的个人信息采集核心。当前第一目标是稳定�
 - 与维护者的对话、任务清单、Issue、PR、Spec、ADR 和设计文档使用中文。
 - 代码与代码注释使用英文。
 - Commit 使用中文 Conventional Commits。
-- `README.md` / `README.en.md`、`CONTRIBUTING.md` / `CONTRIBUTING.en.md` 必须同一 PR 联动更新。
+- `CHANGELOG.md` 面向发布受众，使用英文。
+- `README.md` / `README.en.md`、`CONTRIBUTING.md` / `CONTRIBUTING.en.md` 必须同一 PR 联动更新，`selftest` 会校验两者章节结构一致。
 
 ## 控制面
 
@@ -39,6 +40,23 @@ Muxio 是本地优先的个人信息采集核心。当前第一目标是稳定�
 9. 提交前必须通过 `./scripts/selftest.sh`；CI 红灯不得合并。
 10. 小 PR、短分支、一个逻辑变更一个 Commit；不得把凭据、个人采集数据或运行数据库提交到仓库。
 
+## 决策卡点
+
+下列变更 Agent 不得自行决定。必须停止实现，创建 `spec-needed` Issue 写清选项、权衡和推荐，等待维护者裁决：
+
+1. 新增任何外部直接依赖（Go module 或 Web 工具链）。
+2. 修改或取代任何已接受的 ADR。
+3. 修改 `docs/design/data-model.md` 中的不变量。
+4. 调整 Roadmap 的 v0.1 In / Out 边界，或改变 M1 切片顺序。
+5. 改变 `api/openapi.yaml` 已发布端点的行为或字段语义。
+6. 引入新的网络出站行为、凭据存储位置或数据落盘位置。
+7. 放宽任何既有安全约束，包括监听地址、文件权限和超时上限。
+8. 删除、跳过或放宽 `scripts/selftest.sh` 中的任何检查。
+
+卡点之外的实现细节不需要等待。停下来问的成本，远低于事后回滚一个已被依赖的错误决策。
+
+`make status` 输出当前里程碑、Spec 与 ADR 的真实状态，用于开工前对齐和交接。
+
 ## 人与 Agent 协作
 
 - 一份 Spec 或一个边界清晰的 Issue 是一个实现工作单元。
@@ -51,6 +69,7 @@ Muxio 是本地优先的个人信息采集核心。当前第一目标是稳定�
 
 ```sh
 make bootstrap
+make status
 make check
 go run ./cmd/muxio version
 go run ./cmd/muxio serve
@@ -68,3 +87,4 @@ go run ./cmd/muxio serve
 - `docs/decisions/`：不可静默推翻的 ADR。
 - `docs/specs/`：可独立实现和验收的规格。
 - `scripts/selftest.sh`：本地与 CI 共用的统一门禁。
+- `scripts/status.sh`：从仓库真实状态推导的全局视图，不落盘。

@@ -9,6 +9,8 @@
 git diff --check
 ```
 
+开工前和交接时用 `make status` 对齐全局位置与待决策事项；它只读不写，不产生需要维护的第二份文档。
+
 `selftest` 与 CI 使用同一入口，检查文档基线、ADR/Spec 索引、OpenAPI、`go mod tidy`、格式、构建、vet 和 race tests。后续加入 Web 工具链时，也必须接入同一入口。
 
 ## 依赖
@@ -29,7 +31,7 @@ git diff --check
 - 遵循 Semantic Versioning，tag 为 `vX.Y.Z`。
 - `v1.0.0` 前仍必须在 Changelog 声明破坏性变更。
 - Core 与未来 Web 独立发布；API 使用路径版本 `/api/v1`。
-- 版本由 Git tag 注入二进制，不维护第二份硬编码发布版本。
+- 版本由 Git tag 注入二进制（`make build` 通过 `-ldflags` 写入），不维护第二份硬编码发布版本。
 
 ## 发布前最低检查
 

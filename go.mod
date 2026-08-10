@@ -1,3 +1,3 @@
 module github.com/ConteMan/muxio
 
-go 1.25.9
+go 1.25

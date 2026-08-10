@@ -6,7 +6,7 @@ Muxio is documentation-first and applies the same collaboration rules to humans 
 
 ## Development environment
 
-Only Go 1.25.9 is currently required. The Web toolchain will be added after its implementation spec is accepted.
+Only Go 1.25 or newer is currently required. The Web toolchain will be added after its implementation spec is accepted.
 
 ```sh
 git clone git@github.com:ConteMan/muxio.git
