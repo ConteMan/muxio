@@ -50,6 +50,13 @@ echo '{"external_id":"note-1","title":"Title","body":"Body"}' | muxio import --s
 The second run reports `imported=0 duplicate=1 failed=0`. The database lives in
 the platform data directory by default; `MUXIO_HOME` overrides it.
 
+Review past runs, and find which line failed in one of them and why:
+
+```sh
+muxio runs
+muxio runs show 1
+```
+
 Run the complete quality gate:
 
 ```sh
