@@ -1,0 +1,66 @@
+openapi: 3.1.0
+info:
+  title: Muxio API
+  version: 0.1.0
+  description: Local HTTP API for the Muxio information capture core.
+servers:
+  - url: http://127.0.0.1:8080
+paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      summary: Check process health
+      responses:
+        "200":
+          description: The process is healthy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /readyz:
+    get:
+      operationId: getReadiness
+      summary: Check service readiness
+      responses:
+        "200":
+          description: The service is ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /api/v1/status:
+    get:
+      operationId: getStatus
+      summary: Read the local service status
+      responses:
+        "200":
+          description: Current service status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+components:
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - ready
+    Status:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - version
+      properties:
+        status:
+          type: string
+          const: ok
+        version:
+          type: string

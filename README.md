@@ -1,0 +1,57 @@
+# Muxio
+
+**中文** | [English](README.en.md)
+
+Muxio 是一个本地优先的个人信息采集核心。它的首要目标是从本机、局域网和在线来源稳定取得信息，并让每条记录可搜索、可追溯、可导出。
+
+> 当前状态：项目基础已建立，采集与 SQLite 尚未实现。范围以 [Roadmap](docs/roadmap.md) 为准。
+
+## 原则
+
+- 稳定采集优先于内容理解和自动化。
+- Go 单二进制、SQLite、本地 HTTP API。
+- 连接器模块化，但不提前冻结外部插件协议。
+- Web 与核心同仓、工程独立，只通过 OpenAPI 合同协作。
+- 个人数据默认留在本地，服务默认只监听 loopback。
+
+## 快速开始
+
+要求 Go 1.25.9 或兼容版本。
+
+```sh
+make bootstrap
+go run ./cmd/muxio version
+go run ./cmd/muxio serve
+```
+
+另一个终端验证：
+
+```sh
+curl http://127.0.0.1:8080/healthz
+curl http://127.0.0.1:8080/api/v1/status
+```
+
+运行全部质量门禁：
+
+```sh
+make check
+```
+
+## 仓库地图
+
+- `cmd/muxio/`：Go 单二进制入口。
+- `internal/`：核心实现，不作为公共 SDK。
+- `api/openapi.yaml`：核心与 Web 的公开合同。
+- `web/`：独立 Web 工程边界。
+- `docs/`：设计、ADR、Roadmap 和 Specs。
+- `scripts/selftest.sh`：本地与 CI 共用门禁。
+
+详细入口见 [项目地图](docs/MAP.md) 和 [架构设计](docs/design/architecture.md)。
+
+## 参与贡献
+
+请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 和 [AGENTS.md](AGENTS.md)。任务与进度使用 GitHub Issues；长期合同保存在 `docs/`。
+
+## 许可证
+
+[MIT](LICENSE)

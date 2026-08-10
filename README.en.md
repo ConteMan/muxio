@@ -1,0 +1,57 @@
+# Muxio
+
+[中文](README.md) | **English**
+
+Muxio is a local-first personal information capture core. Its first goal is to collect information reliably from local devices, LAN sources, websites, and public APIs while keeping every record searchable, traceable, and exportable.
+
+> Status: the maintainable project foundation is in place; capture and SQLite storage are not implemented yet. See the [Roadmap](docs/roadmap.md) for scope.
+
+## Principles
+
+- Reliable capture comes before content understanding and automation.
+- One Go binary, SQLite, and a local HTTP API.
+- Modular connectors without freezing an external plugin protocol too early.
+- Core and Web share a repository but remain independent projects joined only by OpenAPI.
+- Personal data stays local by default, and the service listens on loopback only.
+
+## Quick start
+
+Go 1.25.9 or a compatible version is required.
+
+```sh
+make bootstrap
+go run ./cmd/muxio version
+go run ./cmd/muxio serve
+```
+
+Verify from another terminal:
+
+```sh
+curl http://127.0.0.1:8080/healthz
+curl http://127.0.0.1:8080/api/v1/status
+```
+
+Run the complete quality gate:
+
+```sh
+make check
+```
+
+## Repository map
+
+- `cmd/muxio/`: entry point for the Go binary.
+- `internal/`: core implementation, not a public SDK.
+- `api/openapi.yaml`: public contract between the core and Web.
+- `web/`: boundary for the independent Web project.
+- `docs/`: design, ADRs, roadmap, and specs.
+- `scripts/selftest.sh`: shared local and CI quality gate.
+
+See the [project map](docs/MAP.md) and [architecture](docs/design/architecture.md) for details. The durable project documents are currently maintained in Chinese.
+
+## Contributing
+
+Read [CONTRIBUTING.en.md](CONTRIBUTING.en.md) and [AGENTS.md](AGENTS.md) before starting. GitHub Issues track work and progress; `docs/` holds durable contracts.
+
+## License
+
+[MIT](LICENSE)
