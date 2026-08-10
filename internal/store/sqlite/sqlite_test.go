@@ -18,8 +18,14 @@ func TestMigrateIsIdempotentAndRecorded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SchemaVersion: %v", err)
 	}
-	if version != 1 {
-		t.Fatalf("schema version = %d, want 1", version)
+
+	// Every embedded migration must be applied and recorded exactly once.
+	available, err := loadMigrations()
+	if err != nil {
+		t.Fatalf("loadMigrations: %v", err)
+	}
+	if version != len(available) {
+		t.Fatalf("schema version = %d, want %d", version, len(available))
 	}
 
 	// Re-running must be a no-op rather than an error or a duplicate row.
@@ -32,8 +38,8 @@ func TestMigrateIsIdempotentAndRecorded(t *testing.T) {
 		`SELECT COUNT(*) FROM schema_migrations`).Scan(&applied); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if applied != 1 {
-		t.Fatalf("schema_migrations has %d rows, want 1", applied)
+	if applied != len(available) {
+		t.Fatalf("schema_migrations has %d rows, want %d", applied, len(available))
 	}
 }
 
@@ -61,7 +67,7 @@ func TestAddCaptureIsIdempotent(t *testing.T) {
 
 	rec := normalize(t, record.Record{ExternalID: "note-1", Title: "Title", Body: "body"})
 
-	inserted, err := store.AddCapture(ctx, sourceID, rec)
+	inserted, err := store.AddCapture(ctx, sourceID, 0, rec)
 	if err != nil {
 		t.Fatalf("first AddCapture: %v", err)
 	}
@@ -69,7 +75,7 @@ func TestAddCaptureIsIdempotent(t *testing.T) {
 		t.Fatal("first insert reported a duplicate")
 	}
 
-	inserted, err = store.AddCapture(ctx, sourceID, rec)
+	inserted, err = store.AddCapture(ctx, sourceID, 0, rec)
 	if err != nil {
 		t.Fatalf("second AddCapture: %v", err)
 	}
@@ -86,12 +92,12 @@ func TestChangedContentKeepsBothVersions(t *testing.T) {
 	sourceID := ensureSource(t, store, "notes")
 
 	original := normalize(t, record.Record{ExternalID: "note-1", Title: "Title", Body: "first"})
-	if _, err := store.AddCapture(ctx, sourceID, original); err != nil {
+	if _, err := store.AddCapture(ctx, sourceID, 0, original); err != nil {
 		t.Fatalf("AddCapture original: %v", err)
 	}
 
 	revised := normalize(t, record.Record{ExternalID: "note-1", Title: "Title", Body: "second"})
-	inserted, err := store.AddCapture(ctx, sourceID, revised)
+	inserted, err := store.AddCapture(ctx, sourceID, 0, revised)
 	if err != nil {
 		t.Fatalf("AddCapture revised: %v", err)
 	}
@@ -133,7 +139,7 @@ func TestSameExternalIDAcrossSourcesStaysSeparate(t *testing.T) {
 	rec := normalize(t, record.Record{ExternalID: "shared", Body: "body"})
 
 	for _, sourceID := range []int64{first, second} {
-		inserted, err := store.AddCapture(ctx, sourceID, rec)
+		inserted, err := store.AddCapture(ctx, sourceID, 0, rec)
 		if err != nil {
 			t.Fatalf("AddCapture: %v", err)
 		}
@@ -178,7 +184,7 @@ func TestForeignKeysAreEnforced(t *testing.T) {
 	store := openTestStore(t)
 
 	rec := normalize(t, record.Record{ExternalID: "orphan", Body: "body"})
-	if _, err := store.AddCapture(ctx, 9999, rec); err == nil {
+	if _, err := store.AddCapture(ctx, 9999, 0, rec); err == nil {
 		t.Fatal("a capture referencing a missing source was accepted")
 	}
 }
@@ -209,7 +215,7 @@ func TestConcurrentWritersStayIdempotent(t *testing.T) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			inserted, err := store.AddCapture(ctx, sourceID, rec)
+			inserted, err := store.AddCapture(ctx, sourceID, 0, rec)
 			inserts[index] = inserted
 			failures[index] = err
 		}()
@@ -241,7 +247,7 @@ func TestReopenAfterInterruptKeepsCommittedRows(t *testing.T) {
 	first := openFileStore(t, databasePath)
 	sourceID := ensureSource(t, first, "notes")
 	rec := normalize(t, record.Record{ExternalID: "note-1", Body: "body"})
-	if _, err := first.AddCapture(ctx, sourceID, rec); err != nil {
+	if _, err := first.AddCapture(ctx, sourceID, 0, rec); err != nil {
 		t.Fatalf("AddCapture: %v", err)
 	}
 	// Drop the handle without a graceful shutdown path.
@@ -250,7 +256,7 @@ func TestReopenAfterInterruptKeepsCommittedRows(t *testing.T) {
 	}
 
 	reopened := openFileStore(t, databasePath)
-	inserted, err := reopened.AddCapture(ctx, sourceID, rec)
+	inserted, err := reopened.AddCapture(ctx, sourceID, 0, rec)
 	if err != nil {
 		t.Fatalf("AddCapture after reopen: %v", err)
 	}

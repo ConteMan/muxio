@@ -6,13 +6,16 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/ConteMan/muxio/internal/api"
 	"github.com/ConteMan/muxio/internal/app"
+	"github.com/ConteMan/muxio/internal/logging"
 	"github.com/ConteMan/muxio/internal/paths"
 	"github.com/ConteMan/muxio/internal/store/sqlite"
 	"github.com/ConteMan/muxio/internal/version"
@@ -26,6 +29,7 @@ Usage:
 Commands:
   serve      Start the local HTTP service
   import     Read JSONL capture records from stdin
+  runs       Show run history and what happened during a run
   db         Inspect the local database
   version    Print build version
   help       Show this help
@@ -64,6 +68,8 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return runServe(ctx, args[1:], stdout, stderr)
 	case "import":
 		return runImport(ctx, args[1:], stdin, stdout, stderr)
+	case "runs":
+		return runRuns(ctx, args[1:], stdout, stderr)
 	case "db":
 		return runDB(ctx, args[1:], stdout, stderr)
 	default:
@@ -76,6 +82,7 @@ func runImport(ctx context.Context, args []string, stdin io.Reader, stdout, stde
 	flags := flag.NewFlagSet("import", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	sourceName := flags.String("source", "", "name of the source to import into")
+	logLevel := flags.String("log-level", "", "debug, info, warn or error")
 	if err := flags.Parse(args); err != nil {
 		return exitUsage
 	}
@@ -88,6 +95,12 @@ func runImport(ctx context.Context, args []string, stdin io.Reader, stdout, stde
 		return exitUsage
 	}
 
+	logger, err := newLogger(*logLevel, stderr)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "import: %v\n", err)
+		return exitUsage
+	}
+
 	store, cleanup, err := openStore(ctx)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "import: %v\n", err)
@@ -95,19 +108,33 @@ func runImport(ctx context.Context, args []string, stdin io.Reader, stdout, stde
 	}
 	defer cleanup()
 
-	result, err := app.ImportJSONL(ctx, store, stdin, stderr, strings.TrimSpace(*sourceName))
+	result, err := app.ImportJSONL(ctx, store, stdin, logger, strings.TrimSpace(*sourceName))
 	// Counts are reported even on failure: knowing what landed matters most
-	// exactly when something went wrong.
-	_, _ = fmt.Fprintf(stdout, "imported=%d duplicate=%d failed=%d\n",
-		result.Imported, result.Duplicate, result.Failed)
+	// exactly when something went wrong. The run id points at the full story.
+	_, _ = fmt.Fprintf(stdout, "run=%d imported=%d duplicate=%d failed=%d\n",
+		result.RunID, result.Imported, result.Duplicate, result.Failed)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "import: %v\n", err)
 		return exitError
 	}
 	if result.Failed > 0 {
+		_, _ = fmt.Fprintf(stderr, "see `muxio runs show %d` for the rejected lines\n", result.RunID)
 		return exitError
 	}
 	return exitOK
+}
+
+// newLogger resolves the log level from the flag, then the environment.
+func newLogger(levelFlag string, stderr io.Writer) (*slog.Logger, error) {
+	name := levelFlag
+	if name == "" {
+		name = os.Getenv(logging.LevelEnv)
+	}
+	level, err := logging.ParseLevel(name)
+	if err != nil {
+		return nil, err
+	}
+	return logging.New(stderr, level), nil
 }
 
 func runDB(ctx context.Context, args []string, stdout, stderr io.Writer) int {
