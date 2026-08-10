@@ -36,9 +36,10 @@ const (
 // file must not be able to flood the event table.
 const MaxEventsPerRun = 1000
 
-// EventRetention bounds how long events are kept. Runs themselves are never
-// purged: losing events costs explainability, losing runs costs correctness.
-const EventRetention = 30 * 24 * time.Hour
+// DefaultEventRetention bounds how long events are kept unless configuration
+// says otherwise. Runs themselves are never purged: losing events costs
+// explainability, losing runs costs correctness.
+const DefaultEventRetention = 30 * 24 * time.Hour
 
 // StaleAfter is how long a run may go without a heartbeat before a later
 // process treats it as interrupted. It must exceed HeartbeatInterval by enough

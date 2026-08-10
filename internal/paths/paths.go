@@ -19,6 +19,9 @@ const dirPerm os.FileMode = 0o700
 // DatabaseFile is the SQLite database name inside the resolved home directory.
 const DatabaseFile = "muxio.db"
 
+// ConfigFileName is the configuration file name.
+const ConfigFileName = "config.toml"
+
 // Home returns the directory holding Muxio's data. It does not create anything.
 func Home() (string, error) {
 	if override := os.Getenv(HomeEnv); override != "" {
@@ -43,6 +46,40 @@ func Database() (string, error) {
 		return "", err
 	}
 	return filepath.Join(home, DatabaseFile), nil
+}
+
+// ConfigFile returns the configuration path. It does not create the file.
+//
+// Configuration lives in the platform config directory while data lives in the
+// data directory, but MUXIO_HOME collapses both into one place so a portable or
+// test installation stays self-contained.
+func ConfigFile() (string, error) {
+	if override := os.Getenv(HomeEnv); override != "" {
+		home, err := Home()
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(home, ConfigFileName), nil
+	}
+
+	base, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve config directory: %w", err)
+	}
+	return filepath.Join(base, "muxio", ConfigFileName), nil
+}
+
+// EnsureConfigDir creates the directory holding the configuration file.
+func EnsureConfigDir() (string, error) {
+	configPath, err := ConfigFile()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Dir(configPath)
+	if err := os.MkdirAll(dir, dirPerm); err != nil {
+		return "", fmt.Errorf("create config directory: %w", err)
+	}
+	return dir, nil
 }
 
 // EnsureHome creates the data directory with owner-only permissions.

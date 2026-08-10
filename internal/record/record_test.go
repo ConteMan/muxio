@@ -13,7 +13,7 @@ func TestNormalizeAppliesCanonicalForm(t *testing.T) {
 		Title:      "  hello\r\nworld  ",
 		Body:       "line one\r\nline two\r",
 		OccurredAt: "2026-08-10T18:00:00+08:00",
-	}.Normalize()
+	}.Normalize(DefaultMaxBodyBytes)
 	if err != nil {
 		t.Fatalf("Normalize: %v", err)
 	}
@@ -44,13 +44,13 @@ func TestNormalizeRejectsInvalidRecords(t *testing.T) {
 		{"missing external id", Record{ExternalID: "   "}, ErrMissingExternalID},
 		{"oversized body", Record{
 			ExternalID: "big",
-			Body:       strings.Repeat("x", MaxBodyBytes+1),
+			Body:       strings.Repeat("x", DefaultMaxBodyBytes+1),
 		}, ErrBodyTooLarge},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := test.record.Normalize(); !errors.Is(err, test.wantErr) {
+			if _, err := test.record.Normalize(DefaultMaxBodyBytes); !errors.Is(err, test.wantErr) {
 				t.Fatalf("err = %v, want %v", err, test.wantErr)
 			}
 		})
@@ -58,7 +58,7 @@ func TestNormalizeRejectsInvalidRecords(t *testing.T) {
 }
 
 func TestNormalizeKeepsUnknownTimeEmpty(t *testing.T) {
-	normalized, err := Record{ExternalID: "note"}.Normalize()
+	normalized, err := Record{ExternalID: "note"}.Normalize(DefaultMaxBodyBytes)
 	if err != nil {
 		t.Fatalf("Normalize: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestNormalizeKeepsUnknownTimeEmpty(t *testing.T) {
 		t.Fatalf("OccurredAt = %q, want empty rather than a guess", normalized.OccurredAt)
 	}
 
-	if _, err := (Record{ExternalID: "note", OccurredAt: "10/08/2026"}).Normalize(); err == nil {
+	if _, err := (Record{ExternalID: "note", OccurredAt: "10/08/2026"}).Normalize(DefaultMaxBodyBytes); err == nil {
 		t.Fatal("a non-RFC3339 timestamp was accepted")
 	}
 }
@@ -149,7 +149,7 @@ func TestMetadataJSONIsDeterministic(t *testing.T) {
 
 func mustNormalize(t *testing.T, rec Record) Record {
 	t.Helper()
-	normalized, err := rec.Normalize()
+	normalized, err := rec.Normalize(DefaultMaxBodyBytes)
 	if err != nil {
 		t.Fatalf("Normalize: %v", err)
 	}

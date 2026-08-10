@@ -103,3 +103,55 @@ func TestPlatformDefaultIsUsedWithoutOverride(t *testing.T) {
 		t.Fatalf("Home() = %q, want an absolute path", resolved)
 	}
 }
+
+func TestConfigFileFollowsHomeOverride(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(HomeEnv, home)
+
+	configPath, err := ConfigFile()
+	if err != nil {
+		t.Fatalf("ConfigFile: %v", err)
+	}
+	if want := filepath.Join(home, ConfigFileName); configPath != want {
+		t.Fatalf("ConfigFile() = %q, want %q", configPath, want)
+	}
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+		t.Fatalf("ConfigFile created the file: %v", err)
+	}
+}
+
+// Without an override, config and data live in separate platform directories.
+func TestConfigFileUsesPlatformConfigDirectory(t *testing.T) {
+	t.Setenv(HomeEnv, "")
+
+	configPath, err := ConfigFile()
+	if err != nil {
+		t.Fatalf("ConfigFile: %v", err)
+	}
+	if filepath.Base(configPath) != ConfigFileName {
+		t.Fatalf("ConfigFile() = %q", configPath)
+	}
+	if !filepath.IsAbs(configPath) {
+		t.Fatalf("ConfigFile() = %q, want an absolute path", configPath)
+	}
+}
+
+func TestEnsureConfigDirIsOwnerOnly(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "cfg")
+	t.Setenv(HomeEnv, home)
+
+	dir, err := EnsureConfigDir()
+	if err != nil {
+		t.Fatalf("EnsureConfigDir: %v", err)
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits are not meaningful on Windows")
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != dirPerm {
+		t.Fatalf("permissions = %04o, want %04o", perm, dirPerm)
+	}
+}

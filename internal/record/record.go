@@ -13,10 +13,11 @@ import (
 	"time"
 )
 
-// MaxBodyBytes bounds a single capture body. Attachments and large binaries are
-// out of scope for the first phase, so an oversized body is a rejected record
-// rather than a reason to grow the database.
-const MaxBodyBytes = 5 << 20
+// DefaultMaxBodyBytes bounds a single capture body unless configuration says
+// otherwise. Attachments and large binaries are out of scope for the first
+// phase, so an oversized body is a rejected record rather than a reason to grow
+// the database.
+const DefaultMaxBodyBytes = 5 << 20
 
 // TimeFormat is the single representation for persisted and API timestamps.
 // Display layers are responsible for converting to a local zone.
@@ -42,7 +43,7 @@ type Record struct {
 
 // Normalize applies the canonical form and validates the result. Normalization
 // feeds the content hash, so changing these rules is equivalent to a migration.
-func (r Record) Normalize() (Record, error) {
+func (r Record) Normalize(maxBodyBytes int) (Record, error) {
 	normalized := Record{
 		ExternalID:   strings.TrimSpace(r.ExternalID),
 		Title:        strings.TrimSpace(normalizeNewlines(r.Title)),
@@ -55,9 +56,9 @@ func (r Record) Normalize() (Record, error) {
 	if normalized.ExternalID == "" {
 		return Record{}, ErrMissingExternalID
 	}
-	if len(normalized.Body) > MaxBodyBytes {
+	if len(normalized.Body) > maxBodyBytes {
 		return Record{}, fmt.Errorf("%w: %d bytes, limit %d",
-			ErrBodyTooLarge, len(normalized.Body), MaxBodyBytes)
+			ErrBodyTooLarge, len(normalized.Body), maxBodyBytes)
 	}
 	if normalized.MIMEType == "" {
 		normalized.MIMEType = "text/plain"

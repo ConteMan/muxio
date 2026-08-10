@@ -9,12 +9,12 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/ConteMan/muxio/internal/api"
 	"github.com/ConteMan/muxio/internal/app"
+	"github.com/ConteMan/muxio/internal/config"
 	"github.com/ConteMan/muxio/internal/logging"
 	"github.com/ConteMan/muxio/internal/paths"
 	"github.com/ConteMan/muxio/internal/store/sqlite"
@@ -30,6 +30,7 @@ Commands:
   serve      Start the local HTTP service
   import     Read JSONL capture records from stdin
   runs       Show run history and what happened during a run
+  config     Inspect and change settings
   db         Inspect the local database
   version    Print build version
   help       Show this help
@@ -70,6 +71,8 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return runImport(ctx, args[1:], stdin, stdout, stderr)
 	case "runs":
 		return runRuns(ctx, args[1:], stdout, stderr)
+	case "config":
+		return runConfig(args[1:], stdout, stderr)
 	case "db":
 		return runDB(ctx, args[1:], stdout, stderr)
 	default:
@@ -95,7 +98,19 @@ func runImport(ctx context.Context, args []string, stdin io.Reader, stdout, stde
 		return exitUsage
 	}
 
-	logger, err := newLogger(*logLevel, stderr)
+	loaded, err := loadConfig()
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "import: %v\n", err)
+		return exitError
+	}
+	if isFlagSet(flags, "log-level") {
+		if err := loaded.Override("log.level", *logLevel); err != nil {
+			_, _ = fmt.Fprintf(stderr, "import: %v\n", err)
+			return exitUsage
+		}
+	}
+
+	logger, err := newLogger(loaded.Config.Log.Level, stderr)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "import: %v\n", err)
 		return exitUsage
@@ -108,7 +123,8 @@ func runImport(ctx context.Context, args []string, stdin io.Reader, stdout, stde
 	}
 	defer cleanup()
 
-	result, err := app.ImportJSONL(ctx, store, stdin, logger, strings.TrimSpace(*sourceName))
+	result, err := app.ImportJSONL(ctx, store, stdin, logger,
+		strings.TrimSpace(*sourceName), importOptions(loaded.Config))
 	// Counts are reported even on failure: knowing what landed matters most
 	// exactly when something went wrong. The run id points at the full story.
 	_, _ = fmt.Fprintf(stdout, "run=%d imported=%d duplicate=%d failed=%d\n",
@@ -124,17 +140,33 @@ func runImport(ctx context.Context, args []string, stdin io.Reader, stdout, stde
 	return exitOK
 }
 
-// newLogger resolves the log level from the flag, then the environment.
-func newLogger(levelFlag string, stderr io.Writer) (*slog.Logger, error) {
-	name := levelFlag
-	if name == "" {
-		name = os.Getenv(logging.LevelEnv)
-	}
-	level, err := logging.ParseLevel(name)
+// newLogger builds the logger from the already-resolved configuration.
+func newLogger(level string, stderr io.Writer) (*slog.Logger, error) {
+	parsed, err := logging.ParseLevel(level)
 	if err != nil {
 		return nil, err
 	}
-	return logging.New(stderr, level), nil
+	return logging.New(stderr, parsed), nil
+}
+
+// importOptions translates configuration into the settings the use case needs.
+func importOptions(c config.Config) app.Options {
+	return app.Options{
+		MaxBodyBytes:   c.Capture.MaxBodyBytes,
+		EventRetention: c.RunEventRetention(),
+	}
+}
+
+// isFlagSet reports whether the user actually passed a flag, as opposed to it
+// holding its zero value. Only flags that were set may override the file.
+func isFlagSet(flags *flag.FlagSet, name string) bool {
+	found := false
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
 }
 
 func runDB(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -186,7 +218,7 @@ func openStore(ctx context.Context) (*sqlite.Store, func(), error) {
 func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	addr := flags.String("addr", "127.0.0.1:8080", "HTTP listen address")
+	addr := flags.String("addr", "", "HTTP listen address (overrides config)")
 	if err := flags.Parse(args); err != nil {
 		return exitUsage
 	}
@@ -194,12 +226,26 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 		_, _ = fmt.Fprintln(stderr, "serve does not accept positional arguments")
 		return exitUsage
 	}
-	if err := validateLoopbackAddress(*addr); err != nil {
-		_, _ = fmt.Fprintf(stderr, "invalid --addr: %v\n", err)
+
+	loaded, err := loadConfig()
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "serve: %v\n", err)
+		return exitError
+	}
+	if isFlagSet(flags, "addr") {
+		if err := loaded.Override("server.addr", *addr); err != nil {
+			_, _ = fmt.Fprintf(stderr, "invalid --addr: %v\n", err)
+			return exitUsage
+		}
+	}
+	listenAddr := loaded.Config.Server.Addr
+
+	if err := validateLoopbackAddress(listenAddr); err != nil {
+		_, _ = fmt.Fprintf(stderr, "invalid listen address: %v\n", err)
 		return exitUsage
 	}
 
-	listener, err := net.Listen("tcp", *addr)
+	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "serve: %v\n", err)
 		return exitError

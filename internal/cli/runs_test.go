@@ -117,7 +117,9 @@ func TestImportRejectsUnknownLogLevel(t *testing.T) {
 	if code != exitUsage {
 		t.Fatalf("exit = %d, want %d", code, exitUsage)
 	}
-	if !strings.Contains(stderr.String(), "unknown log level") {
+	// The error names the setting and what it accepts.
+	if !strings.Contains(stderr.String(), "log.level") ||
+		!strings.Contains(stderr.String(), "want debug, info, warn or error") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }

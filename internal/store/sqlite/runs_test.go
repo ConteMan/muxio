@@ -195,7 +195,7 @@ func TestPurgeExpiredEventsKeepsRuns(t *testing.T) {
 		t.Fatalf("AppendEvent: %v", err)
 	}
 	// Age one event past the retention window.
-	expired := time.Now().UTC().Add(-2 * run.EventRetention).Format(record.TimeFormat)
+	expired := time.Now().UTC().Add(-2 * run.DefaultEventRetention).Format(record.TimeFormat)
 	if _, err := store.db.ExecContext(ctx, `
 		INSERT INTO run_events (run_id, level, message, detail_json, occurred_at)
 		VALUES (?, ?, ?, '{}', ?)`,
@@ -203,7 +203,7 @@ func TestPurgeExpiredEventsKeepsRuns(t *testing.T) {
 		t.Fatalf("seed expired event: %v", err)
 	}
 
-	removed, err := store.PurgeExpiredEvents(ctx)
+	removed, err := store.PurgeExpiredEvents(ctx, run.DefaultEventRetention)
 	if err != nil {
 		t.Fatalf("PurgeExpiredEvents: %v", err)
 	}

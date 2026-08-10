@@ -298,7 +298,7 @@ func ensureSource(t *testing.T, store *Store, name string) int64 {
 
 func normalize(t *testing.T, rec record.Record) record.Record {
 	t.Helper()
-	normalized, err := rec.Normalize()
+	normalized, err := rec.Normalize(record.DefaultMaxBodyBytes)
 	if err != nil {
 		t.Fatalf("Normalize: %v", err)
 	}
