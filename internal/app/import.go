@@ -24,6 +24,14 @@ const ManualConnectorKind = "manual"
 // escaping, so the line budget is larger than the body limit.
 const maxLineBytes = 32 << 20
 
+// Options carries the resolved settings an import needs. They arrive from
+// configuration rather than package constants so a change in config.toml takes
+// effect without a rebuild.
+type Options struct {
+	MaxBodyBytes   int
+	EventRetention time.Duration
+}
+
 // RunStore is the storage capability an import needs.
 type RunStore interface {
 	EnsureSource(ctx context.Context, name, connectorKind string) (int64, error)
@@ -34,7 +42,7 @@ type RunStore interface {
 	AppendEvent(ctx context.Context, runID int64, event run.Event) error
 	RecordFailure(ctx context.Context, runID int64, event *run.Event) error
 	RecoverStaleRuns(ctx context.Context) (int, error)
-	PurgeExpiredEvents(ctx context.Context) (int64, error)
+	PurgeExpiredEvents(ctx context.Context, retention time.Duration) (int64, error)
 }
 
 // ImportResult counts the outcome of one import.
@@ -58,9 +66,10 @@ type jsonRecord struct {
 
 // importer carries the per-run state of one import.
 type importer struct {
-	store  RunStore
-	logger *slog.Logger
-	runID  int64
+	store   RunStore
+	logger  *slog.Logger
+	runID   int64
+	options Options
 
 	events        int
 	lastHeartbeat time.Time
@@ -77,6 +86,7 @@ func ImportJSONL(
 	input io.Reader,
 	logger *slog.Logger,
 	sourceName string,
+	options Options,
 ) (ImportResult, error) {
 	var result ImportResult
 
@@ -87,7 +97,7 @@ func ImportJSONL(
 	} else if recovered > 0 {
 		logger.Warn("marked stale runs as interrupted", "count", recovered)
 	}
-	if purged, err := store.PurgeExpiredEvents(ctx); err != nil {
+	if purged, err := store.PurgeExpiredEvents(ctx, options.EventRetention); err != nil {
 		return result, err
 	} else if purged > 0 {
 		logger.Debug("purged expired run events", "count", purged)
@@ -108,6 +118,7 @@ func ImportJSONL(
 		store:         store,
 		logger:        logger.With("run_id", runID, "source", sourceName),
 		runID:         runID,
+		options:       options,
 		lastHeartbeat: time.Now(),
 	}
 	imp.logger.Info("import started")
@@ -180,7 +191,7 @@ func (i *importer) consume(ctx context.Context, input io.Reader, sourceID int64)
 
 		rec, err := decodeLine(line)
 		if err == nil {
-			rec, err = rec.Normalize()
+			rec, err = rec.Normalize(i.options.MaxBodyBytes)
 		}
 		if err != nil {
 			counts.Failed++

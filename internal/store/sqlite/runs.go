@@ -201,9 +201,9 @@ func (s *Store) RecoverStaleRuns(ctx context.Context) (int, error) {
 	return len(stale), nil
 }
 
-// PurgeExpiredEvents drops events past the retention window. Runs are kept.
-func (s *Store) PurgeExpiredEvents(ctx context.Context) (int64, error) {
-	cutoff := time.Now().UTC().Add(-run.EventRetention).Format(record.TimeFormat)
+// PurgeExpiredEvents drops events older than retention. Runs are kept.
+func (s *Store) PurgeExpiredEvents(ctx context.Context, retention time.Duration) (int64, error) {
+	cutoff := time.Now().UTC().Add(-retention).Format(record.TimeFormat)
 
 	result, err := s.db.ExecContext(ctx,
 		`DELETE FROM run_events WHERE occurred_at < ?`, cutoff)

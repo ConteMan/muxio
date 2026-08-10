@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ConteMan/muxio/internal/record"
 	"github.com/ConteMan/muxio/internal/run"
@@ -64,7 +65,9 @@ func (f *fakeStore) RecordFailure(_ context.Context, _ int64, event *run.Event) 
 
 func (f *fakeStore) RecoverStaleRuns(context.Context) (int, error) { return f.recovered, nil }
 
-func (f *fakeStore) PurgeExpiredEvents(context.Context) (int64, error) { return f.purged, nil }
+func (f *fakeStore) PurgeExpiredEvents(context.Context, time.Duration) (int64, error) {
+	return f.purged, nil
+}
 
 func (f *fakeStore) AddCapture(_ context.Context, _, _ int64, rec record.Record) (bool, error) {
 	f.calls++
@@ -97,6 +100,13 @@ func (f *fakeStore) messages() string {
 	return builder.String()
 }
 
+func testOptions() Options {
+	return Options{
+		MaxBodyBytes:   record.DefaultMaxBodyBytes,
+		EventRetention: run.DefaultEventRetention,
+	}
+}
+
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
@@ -104,7 +114,7 @@ func discardLogger() *slog.Logger {
 func importFrom(t *testing.T, store *fakeStore, input string) (ImportResult, error) {
 	t.Helper()
 	return ImportJSONL(context.Background(), store, strings.NewReader(input),
-		discardLogger(), "notes")
+		discardLogger(), "notes", testOptions())
 }
 
 func TestImportCountsOutcomes(t *testing.T) {
@@ -214,7 +224,7 @@ func TestImportFailsWhenStorageFailsImmediately(t *testing.T) {
 }
 
 func TestImportRejectsOversizedBody(t *testing.T) {
-	oversized := strings.Repeat("x", record.MaxBodyBytes+1)
+	oversized := strings.Repeat("x", record.DefaultMaxBodyBytes+1)
 
 	store := newFakeStore()
 	result, err := importFrom(t, store, `{"external_id":"big","body":"`+oversized+`"}`)
@@ -234,7 +244,7 @@ func TestImportRecordsCanceledRun(t *testing.T) {
 
 	store := newFakeStore()
 	_, err := ImportJSONL(ctx, store, strings.NewReader(`{"external_id":"a","body":"x"}`),
-		discardLogger(), "notes")
+		discardLogger(), "notes", testOptions())
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want context.Canceled", err)
 	}
