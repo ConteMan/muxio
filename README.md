@@ -49,6 +49,13 @@ echo '{"external_id":"note-1","title":"标题","body":"正文"}' | muxio import 
 
 第二次输出 `imported=0 duplicate=1 failed=0`。数据库默认位于平台数据目录，`MUXIO_HOME` 可覆盖。
 
+查看历次运行，以及某次运行里哪一行为什么失败：
+
+```sh
+muxio runs
+muxio runs show 1
+```
+
 运行全部质量门禁：
 
 ```sh
