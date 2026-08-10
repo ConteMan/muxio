@@ -6,7 +6,7 @@ Muxio 采用文档先行、对人和 Agent 使用同一规则的协作方式。
 
 ## 开发环境
 
-当前只要求 Go 1.25.9。Web 工具链将在对应 Spec 确认后加入。
+当前只要求 Go 1.25 或更高版本。Web 工具链将在对应 Spec 确认后加入。
 
 ```sh
 git clone git@github.com:ConteMan/muxio.git

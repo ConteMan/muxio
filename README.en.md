@@ -16,7 +16,7 @@ Muxio is a local-first personal information capture core. Its first goal is to c
 
 ## Quick start
 
-Go 1.25.9 or a compatible version is required.
+Go 1.25 or newer is required.
 
 ```sh
 make bootstrap
@@ -45,6 +45,7 @@ make check
 - `web/`: boundary for the independent Web project.
 - `docs/`: design, ADRs, roadmap, and specs.
 - `scripts/selftest.sh`: shared local and CI quality gate.
+- `scripts/status.sh`: `make status`, global progress and pending decisions.
 
 See the [project map](docs/MAP.md) and [architecture](docs/design/architecture.md) for details. The durable project documents are currently maintained in Chinese.
 

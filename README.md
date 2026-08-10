@@ -16,7 +16,7 @@ Muxio 是一个本地优先的个人信息采集核心。它的首要目标是�
 
 ## 快速开始
 
-要求 Go 1.25.9 或兼容版本。
+要求 Go 1.25 或更高版本。
 
 ```sh
 make bootstrap
@@ -45,6 +45,7 @@ make check
 - `web/`：独立 Web 工程边界。
 - `docs/`：设计、ADR、Roadmap 和 Specs。
 - `scripts/selftest.sh`：本地与 CI 共用门禁。
+- `scripts/status.sh`：`make status`，全局进度与待决策事项。
 
 详细入口见 [项目地图](docs/MAP.md) 和 [架构设计](docs/design/architecture.md)。
 
