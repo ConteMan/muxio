@@ -39,11 +39,23 @@ for adr in docs/decisions/[0-9][0-9][0-9]-*.md; do
     "$(field "$adr" 状态)" "$(title "$adr")"
 done
 
+# direct_dependencies counts require entries that are not marked indirect,
+# across both the single-line and block forms of the directive.
+direct_dependencies() {
+  awk '
+    /^require \(/ { block = 1; next }
+    /^\)/         { block = 0; next }
+    /\/\/ indirect/ { next }
+    (block || /^require /) && /[[:space:]]v[0-9]/ { count++ }
+    END { print count + 0 }
+  ' go.mod
+}
+
 printf '\n代码\n'
 printf '  Go 源文件 %s，测试文件 %s，直接依赖 %s\n' \
   "$(find cmd internal -name '*.go' -not -name '*_test.go' | wc -l | xargs)" \
   "$(find cmd internal -name '*_test.go' | wc -l | xargs)" \
-  "$(grep -cE '^[[:space:]]+[a-z0-9._/-]+[[:space:]]+v' go.mod || true)"
+  "$(direct_dependencies)"
 printf '  已发布端点 %s\n' "$(grep -cE '^  /' api/openapi.yaml | xargs)"
 
 printf '\nGit\n'
@@ -54,16 +66,20 @@ printf '  最近 %s\n' "$(git log -1 --format='%h %s (%cr)')"
 printf '\n需要你决定的事\n'
 pending=0
 for spec in docs/specs/[0-9][0-9][0-9]-*.md; do
-  if [ "$(field "$spec" 状态)" = "草稿" ]; then
-    printf '  · Spec %s「%s」仍是草稿，确认后才能开工\n' \
-      "$(basename "$spec" | cut -d- -f1)" "$(title "$spec")"
+  number=$(basename "$spec" | cut -d- -f1)
+  status=$(field "$spec" 状态)
+  [ "$status" = "已实现" ] && continue
+
+  if [ "$status" = "草稿" ]; then
+    printf '  · Spec %s「%s」仍是草稿，确认后才能开工\n' "$number" "$(title "$spec")"
+    pending=1
+  fi
+  # An unimplemented spec proposing a dependency is still an open gate.
+  if grep -q '^## 依赖' "$spec"; then
+    printf '  · Spec %s 提出新增外部依赖，属于决策卡点（AGENTS.md）\n' "$number"
     pending=1
   fi
 done
-if grep -q '^## 依赖' docs/specs/[0-9][0-9][0-9]-*.md 2>/dev/null; then
-  printf '  · 有 Spec 提出了新增外部依赖，属于决策卡点（AGENTS.md）\n'
-  pending=1
-fi
 [ "$pending" -eq 0 ] && printf '  （无）\n'
 
 rule

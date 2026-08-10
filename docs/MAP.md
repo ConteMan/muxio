@@ -13,9 +13,15 @@ cmd/muxio
         → GET /healthz
         → GET /readyz
         → GET /api/v1/status
+    → db path
+      → internal/paths            data directory resolution
+    → import
+      → internal/app              import use case
+        → internal/record         normalization and content hash
+        → internal/store/sqlite   migrations and transactions
 ```
 
-`api/openapi.yaml` 是 HTTP 行为的公开合同。Handler 与契约必须在同一 PR 变更。
+`api/openapi.yaml` 是 HTTP 行为的公开合同。Handler 与契约必须在同一 PR 变更。存储能力目前只经 CLI 暴露，尚未进入 HTTP API。
 
 ## 目标采集路径
 

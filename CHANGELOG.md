@@ -17,9 +17,17 @@ Muxio follows [Semantic Versioning](https://semver.org/). User-visible changes a
   directions, and that the English README and contributing mirrors keep the same
   section structure as their Chinese sources.
 
+- SQLite storage: an embedded migration framework, the `sources` and `captures`
+  tables, and owner-only data directory resolution overridable with `MUXIO_HOME`.
+- `muxio import --source <name>` reads JSONL capture records from stdin. Repeated
+  imports are idempotent, changed content is kept as a new version alongside the
+  old one, and an invalid line fails on its own without stopping the batch.
+- `muxio db path` prints the database location without creating it.
+
 ### Changed
 
 - The required Go toolchain is now `1.25` instead of the patch-level `1.25.9`.
+- `cli.Run` takes stdin, since commands now read from it.
 
 ### Fixed
 
