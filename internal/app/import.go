@@ -10,8 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"time"
 
 	"github.com/ConteMan/muxio/internal/record"
+	"github.com/ConteMan/muxio/internal/run"
 )
 
 // ManualConnectorKind marks sources created by hand rather than by a connector.
@@ -21,14 +24,22 @@ const ManualConnectorKind = "manual"
 // escaping, so the line budget is larger than the body limit.
 const maxLineBytes = 32 << 20
 
-// CaptureWriter is the storage capability an import needs.
-type CaptureWriter interface {
+// RunStore is the storage capability an import needs.
+type RunStore interface {
 	EnsureSource(ctx context.Context, name, connectorKind string) (int64, error)
-	AddCapture(ctx context.Context, sourceID int64, rec record.Record) (bool, error)
+	StartRun(ctx context.Context, sourceID int64, trigger string) (int64, error)
+	Heartbeat(ctx context.Context, runID int64) error
+	FinishRun(ctx context.Context, runID int64, status run.Status, lastError string) error
+	AddCapture(ctx context.Context, sourceID, runID int64, rec record.Record) (bool, error)
+	AppendEvent(ctx context.Context, runID int64, event run.Event) error
+	RecordFailure(ctx context.Context, runID int64, event *run.Event) error
+	RecoverStaleRuns(ctx context.Context) (int, error)
+	PurgeExpiredEvents(ctx context.Context) (int64, error)
 }
 
 // ImportResult counts the outcome of one import.
 type ImportResult struct {
+	RunID     int64
 	Imported  int
 	Duplicate int
 	Failed    int
@@ -45,32 +56,122 @@ type jsonRecord struct {
 	Metadata     map[string]any `json:"metadata"`
 }
 
-// ImportJSONL reads JSONL candidates and stores them idempotently.
+// importer carries the per-run state of one import.
+type importer struct {
+	store  RunStore
+	logger *slog.Logger
+	runID  int64
+
+	events        int
+	lastHeartbeat time.Time
+}
+
+// ImportJSONL reads JSONL candidates, stores them idempotently, and records the
+// run so the outcome stays queryable after the process exits.
 //
-// A malformed or invalid line is counted as failed and reported to problems,
-// then the import continues. A storage failure aborts: it means the process
-// cannot trust anything it writes next.
+// A malformed or invalid line is counted as failed and continues. A storage
+// failure aborts: the process can no longer trust what it writes next.
 func ImportJSONL(
 	ctx context.Context,
-	store CaptureWriter,
+	store RunStore,
 	input io.Reader,
-	problems io.Writer,
+	logger *slog.Logger,
 	sourceName string,
 ) (ImportResult, error) {
 	var result ImportResult
+
+	// Housekeeping before the run: reclaim abandoned runs and drop expired
+	// events. Both are cheap and keep the database honest without a scheduler.
+	if recovered, err := store.RecoverStaleRuns(ctx); err != nil {
+		return result, err
+	} else if recovered > 0 {
+		logger.Warn("marked stale runs as interrupted", "count", recovered)
+	}
+	if purged, err := store.PurgeExpiredEvents(ctx); err != nil {
+		return result, err
+	} else if purged > 0 {
+		logger.Debug("purged expired run events", "count", purged)
+	}
 
 	sourceID, err := store.EnsureSource(ctx, sourceName, ManualConnectorKind)
 	if err != nil {
 		return result, err
 	}
 
+	runID, err := store.StartRun(ctx, sourceID, run.TriggerManual)
+	if err != nil {
+		return result, err
+	}
+	result.RunID = runID
+
+	imp := &importer{
+		store:         store,
+		logger:        logger.With("run_id", runID, "source", sourceName),
+		runID:         runID,
+		lastHeartbeat: time.Now(),
+	}
+	imp.logger.Info("import started")
+	imp.event(ctx, run.Event{
+		Level:   run.LevelInfo,
+		Message: "import started",
+		Detail:  map[string]any{"source": sourceName},
+	})
+
+	counts, err := imp.consume(ctx, input, sourceID)
+	result.Imported = counts.Imported
+	result.Duplicate = counts.Duplicate
+	result.Failed = counts.Failed
+
+	status, failureMessage := outcome(ctx, err, counts)
+	if err != nil {
+		imp.logger.Error("import aborted", "error", err)
+		imp.event(ctx, run.Event{
+			Level:   run.LevelError,
+			Message: failureMessage,
+			Detail:  map[string]any{"error": err.Error()},
+		})
+	} else {
+		imp.logger.Info("import finished",
+			"imported", counts.Imported,
+			"duplicate", counts.Duplicate,
+			"failed", counts.Failed)
+		imp.event(ctx, run.Event{
+			Level:   run.LevelInfo,
+			Message: "import finished",
+			Detail: map[string]any{
+				"imported":  counts.Imported,
+				"duplicate": counts.Duplicate,
+				"failed":    counts.Failed,
+			},
+		})
+	}
+
+	// Closing the run uses a detached context so that a cancelled import still
+	// leaves a terminal status rather than a run that looks abandoned.
+	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	if finishErr := store.FinishRun(finishCtx, runID, status, failureMessage); finishErr != nil {
+		if err == nil {
+			return result, finishErr
+		}
+		imp.logger.Error("could not record run outcome", "error", finishErr)
+	}
+
+	return result, err
+}
+
+// consume reads every line and returns what landed.
+func (i *importer) consume(ctx context.Context, input io.Reader, sourceID int64) (run.Counts, error) {
+	var counts run.Counts
+
 	scanner := bufio.NewScanner(input)
 	scanner.Buffer(make([]byte, 0, 64<<10), maxLineBytes)
 
 	for lineNumber := 1; scanner.Scan(); lineNumber++ {
 		if err := ctx.Err(); err != nil {
-			return result, err
+			return counts, err
 		}
+		i.maybeHeartbeat(ctx)
 
 		line := bytes.TrimSpace(scanner.Bytes())
 		if len(line) == 0 {
@@ -78,37 +179,114 @@ func ImportJSONL(
 		}
 
 		rec, err := decodeLine(line)
+		if err == nil {
+			rec, err = rec.Normalize()
+		}
 		if err != nil {
-			result.Failed++
-			reportLine(problems, lineNumber, err)
+			counts.Failed++
+			if failErr := i.recordFailure(ctx, lineNumber, err); failErr != nil {
+				return counts, failErr
+			}
 			continue
 		}
 
-		normalized, err := rec.Normalize()
+		inserted, err := i.store.AddCapture(ctx, sourceID, i.runID, rec)
 		if err != nil {
-			result.Failed++
-			reportLine(problems, lineNumber, err)
-			continue
-		}
-
-		inserted, err := store.AddCapture(ctx, sourceID, normalized)
-		if err != nil {
-			return result, fmt.Errorf("line %d: %w", lineNumber, err)
+			return counts, fmt.Errorf("line %d: %w", lineNumber, err)
 		}
 		if inserted {
-			result.Imported++
+			counts.Imported++
 		} else {
-			result.Duplicate++
+			counts.Duplicate++
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
 		if errors.Is(err, bufio.ErrTooLong) {
-			return result, fmt.Errorf("a line exceeds the %d byte limit", maxLineBytes)
+			return counts, fmt.Errorf("a line exceeds the %d byte limit", maxLineBytes)
 		}
-		return result, fmt.Errorf("read input: %w", err)
+		return counts, fmt.Errorf("read input: %w", err)
 	}
-	return result, nil
+	return counts, nil
+}
+
+// recordFailure counts a bad line and stores its reason until the event budget
+// is spent, after which only the count keeps rising.
+func (i *importer) recordFailure(ctx context.Context, lineNumber int, cause error) error {
+	i.logger.Warn("line rejected", "line", lineNumber, "error", cause)
+
+	if i.events >= run.MaxEventsPerRun {
+		return i.store.RecordFailure(ctx, i.runID, nil)
+	}
+
+	event := &run.Event{
+		Level:   run.LevelError,
+		Message: fmt.Sprintf("line %d rejected: %v", lineNumber, cause),
+		Detail:  map[string]any{"line": lineNumber},
+	}
+	if err := i.store.RecordFailure(ctx, i.runID, event); err != nil {
+		return err
+	}
+	i.events++
+	i.noteTruncation(ctx)
+	return nil
+}
+
+// event stores one lifecycle event, respecting the same budget.
+func (i *importer) event(ctx context.Context, event run.Event) {
+	if i.events >= run.MaxEventsPerRun {
+		return
+	}
+	if err := i.store.AppendEvent(ctx, i.runID, event); err != nil {
+		i.logger.Error("could not store run event", "error", err)
+		return
+	}
+	i.events++
+	i.noteTruncation(ctx)
+}
+
+// noteTruncation leaves a marker the moment the budget runs out, so a reader
+// can tell a quiet run from a truncated one.
+func (i *importer) noteTruncation(ctx context.Context) {
+	if i.events != run.MaxEventsPerRun {
+		return
+	}
+	// Written directly: the budget is already spent, and this marker explains why.
+	if err := i.store.AppendEvent(ctx, i.runID, run.Event{
+		Level:   run.LevelWarn,
+		Message: "event log truncated: this run reached its event limit",
+		Detail:  map[string]any{"limit": run.MaxEventsPerRun},
+	}); err != nil {
+		i.logger.Error("could not store truncation notice", "error", err)
+		return
+	}
+	i.events++
+}
+
+func (i *importer) maybeHeartbeat(ctx context.Context) {
+	if time.Since(i.lastHeartbeat) < run.HeartbeatInterval {
+		return
+	}
+	i.lastHeartbeat = time.Now()
+	if err := i.store.Heartbeat(ctx, i.runID); err != nil {
+		i.logger.Warn("could not refresh heartbeat", "error", err)
+	}
+}
+
+// outcome maps how the import ended onto the run state machine.
+func outcome(ctx context.Context, err error, counts run.Counts) (run.Status, string) {
+	switch {
+	case err == nil:
+		// Rejected lines are line-level failures, not run-level ones.
+		return run.Succeeded, ""
+	case errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled):
+		return run.Canceled, "import canceled"
+	case counts.Imported > 0 || counts.Duplicate > 0:
+		// Something already committed, so the run is partially done.
+		return run.Partial, "import aborted after committing some records"
+	default:
+		return run.Failed, "import aborted before committing any record"
+	}
 }
 
 func decodeLine(line []byte) (record.Record, error) {
@@ -133,11 +311,4 @@ func decodeLine(line []byte) (record.Record, error) {
 		OccurredAt:   parsed.OccurredAt,
 		Metadata:     parsed.Metadata,
 	}, nil
-}
-
-func reportLine(problems io.Writer, lineNumber int, err error) {
-	if problems == nil {
-		return
-	}
-	_, _ = fmt.Fprintf(problems, "line %d: %v\n", lineNumber, err)
 }

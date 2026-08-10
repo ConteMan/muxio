@@ -122,7 +122,11 @@ func (s *Store) EnsureSource(ctx context.Context, name, connectorKind string) (i
 // AddCapture writes one immutable capture and reports whether it was new.
 // Re-observing the same version is a no-op, which is what makes repeated
 // imports idempotent.
-func (s *Store) AddCapture(ctx context.Context, sourceID int64, rec record.Record) (bool, error) {
+//
+// The capture and the run counter it advances commit together, so a run's
+// counts can never claim more than what actually landed. Pass a zero runID to
+// write a capture that belongs to no run.
+func (s *Store) AddCapture(ctx context.Context, sourceID, runID int64, rec record.Record) (bool, error) {
 	contentHash, err := rec.ContentHash()
 	if err != nil {
 		return false, err
@@ -136,9 +140,11 @@ func (s *Store) AddCapture(ctx context.Context, sourceID int64, rec record.Recor
 	if rec.OccurredAt != "" {
 		occurredAt = rec.OccurredAt
 	}
+	var storedRunID any
+	if runID != 0 {
+		storedRunID = runID
+	}
 
-	// One capture is one transaction. Run counters and checkpoint advancement
-	// join this transaction when later specs introduce them.
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("begin capture: %w", err)
@@ -147,11 +153,11 @@ func (s *Store) AddCapture(ctx context.Context, sourceID int64, rec record.Recor
 
 	result, err := tx.ExecContext(ctx, `
 		INSERT INTO captures (
-		    source_id, external_id, content_hash, title, body,
+		    source_id, run_id, external_id, content_hash, title, body,
 		    mime_type, canonical_url, occurred_at, captured_at, metadata_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (source_id, external_id, content_hash) DO NOTHING`,
-		sourceID, rec.ExternalID, contentHash, rec.Title, rec.Body,
+		sourceID, storedRunID, rec.ExternalID, contentHash, rec.Title, rec.Body,
 		rec.MIMEType, rec.CanonicalURL, occurredAt, record.Now(), metadata)
 	if err != nil {
 		return false, fmt.Errorf("insert capture %q: %w", rec.ExternalID, err)
@@ -161,10 +167,23 @@ func (s *Store) AddCapture(ctx context.Context, sourceID int64, rec record.Recor
 	if err != nil {
 		return false, fmt.Errorf("inspect insert result: %w", err)
 	}
+	inserted := affected == 1
+
+	if runID != 0 {
+		column := "duplicate_count"
+		if inserted {
+			column = "imported_count"
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE runs SET `+column+` = `+column+` + 1 WHERE id = ?`, runID); err != nil {
+			return false, fmt.Errorf("count capture on run %d: %w", runID, err)
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("commit capture %q: %w", rec.ExternalID, err)
 	}
-	return affected == 1, nil
+	return inserted, nil
 }
 
 // CountCaptures reports how many captures a source holds. It supports
