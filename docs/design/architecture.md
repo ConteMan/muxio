@@ -26,6 +26,7 @@ cmd/muxio
     → collector          scheduling, retries, run lifecycle
       → connector        minimal built-in connector contract
     → store/sqlite       transactions, migrations, queries
+    → config             file-backed configuration and validation
     → search             FTS5 projection and queries
     → export             portable JSONL export
   → api/http             versioned external contract
@@ -51,7 +52,20 @@ cmd/muxio
 
 默认使用平台原生目录：配置位于用户配置目录的 `muxio/config.toml`，数据库位于用户数据目录的 `muxio/muxio.db`。`MUXIO_HOME` 可覆盖全部路径，用于测试和便携运行。
 
-运行日志默认写 stderr；导出路径必须显式指定。任何凭据、数据库和个人采集内容都不得进入 Git 仓库。
+`config.toml` 是配置的唯一事实源，数据库不保存配置；凭据存放在独立的 `credentials.toml` 且永不入库。两者的写入语义与保护方式见 [ADR-005](../decisions/005-config-and-credential-storage.md)。
+
+导出路径必须显式指定。任何凭据、数据库和个人采集内容都不得进入 Git 仓库。
+
+## 日志与运行可观测性
+
+日志分两层，各自有明确的事实源：
+
+- **运行事件**入库，与 `run_id` 关联，是界面和 API 查询运行历史与失败原因的依据。它记录状态变化和值得追溯的错误，而不是逐条采集的明细。
+- **调试明细**写 stderr，不入库。它服务于开发和故障现场，不承诺可查询、可保留。
+
+这样划分是为了限制写入压力：SQLite 只有一个写入者，日志若逐条入库会与采集写入争抢同一个写锁。
+
+运行状态的事实源始终是 `runs` 表，事件是它的补充说明而非替代。凭据在写入事件前必须脱敏。
 
 ## 稳定性约束
 
