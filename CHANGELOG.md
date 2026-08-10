@@ -31,6 +31,14 @@ Muxio follows [Semantic Versioning](https://semver.org/). User-visible changes a
   goes stale, without disturbing runs another process is still working on.
 - Structured JSON logs on stderr, carrying the run id. `--log-level` and
   `MUXIO_LOG_LEVEL` select debug, info, warn or error.
+- Configuration in `config.toml`, covering the listen address, log level,
+  capture body limit and run-event retention. Values resolve from flags, then
+  the environment, then the file, then the defaults, and `muxio config show`
+  labels each value with where it came from. An unconfigured Muxio still runs
+  and no file is created behind your back.
+- `muxio config init`, `show`, `set` and `path`. Writes are atomic and refuse to
+  clobber a file that changed since it was read. Generated comments survive a
+  write; comments you add yourself do not.
 
 ### Changed
 
