@@ -1,7 +1,7 @@
 # Spec 002：存储地基与幂等导入
 
-- 状态：草稿
-- 关联：Roadmap M1、ADR-002、design/data-model.md
+- 状态：已实现
+- 关联：Roadmap M1、ADR-002、ADR-004、design/data-model.md
 
 ## 问题
 
@@ -55,9 +55,7 @@ muxio import --source <name> < records.jsonl
 
 本 Spec 引入首个外部直接依赖：SQLite 驱动。
 
-推荐 `modernc.org/sqlite`（纯 Go，无 cgo）。理由：ADR-002 承诺跨平台单文件发布，纯 Go 驱动让 M4 的交叉编译无需为每个目标平台准备 C 工具链，并且内置 FTS5，可支撑后续搜索 Spec。代价是性能低于 `mattn/go-sqlite3`，对个人规模数据可接受。
-
-选定后需补 ADR 记录该决策；实现前由维护者确认。
+选定 `modernc.org/sqlite`（纯 Go，无 cgo），理由与后果见 [ADR-004](../decisions/004-pure-go-sqlite-driver.md)。
 
 ## 边界与非目标
 

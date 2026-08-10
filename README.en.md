@@ -39,6 +39,17 @@ curl http://127.0.0.1:8080/healthz
 curl http://127.0.0.1:8080/api/v1/status
 ```
 
+Import records and confirm that repeating an import creates no duplicates:
+
+```sh
+muxio db path
+echo '{"external_id":"note-1","title":"Title","body":"Body"}' | muxio import --source notes
+echo '{"external_id":"note-1","title":"Title","body":"Body"}' | muxio import --source notes
+```
+
+The second run reports `imported=0 duplicate=1 failed=0`. The database lives in
+the platform data directory by default; `MUXIO_HOME` overrides it.
+
 Run the complete quality gate:
 
 ```sh

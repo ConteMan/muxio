@@ -80,6 +80,10 @@ go run ./cmd/muxio serve
 - `cmd/muxio/`：唯一二进制入口。
 - `internal/cli/`：CLI 命令与进程编排。
 - `internal/api/`：本地 HTTP API。
+- `internal/app/`：用例编排，不依赖任何适配器。
+- `internal/record/`：采集记录的规范化与内容哈希等领域规则。
+- `internal/store/sqlite/`：迁移、事务与查询，SQLite 相关代码只在这里。
+- `internal/paths/`：配置与数据目录解析。
 - `internal/version/`：构建版本信息。
 - `api/openapi.yaml`：跨核心与 Web 的公开接口合同。
 - `web/`：独立 Web 工程边界；当前尚未引入工具链。

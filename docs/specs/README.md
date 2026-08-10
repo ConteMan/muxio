@@ -5,7 +5,7 @@
 | 编号 | 标题 | 状态 |
 |---|---|---|
 | [001](001-foundation.md) | 可维护项目基础 | 已实现 |
-| [002](002-storage-foundation.md) | 存储地基与幂等导入 | 草稿 |
+| [002](002-storage-foundation.md) | 存储地基与幂等导入 | 已实现 |
 
 新增规格复制 [template.md](template.md)，编号递增。
 
