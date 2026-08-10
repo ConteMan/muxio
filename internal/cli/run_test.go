@@ -32,7 +32,7 @@ func TestVersion(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := Run(context.Background(), []string{"version"}, &stdout, &stderr)
+	code := Run(context.Background(), []string{"version"}, nil, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("exit code = %d", code)
@@ -49,7 +49,7 @@ func TestUnknownCommand(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := Run(context.Background(), []string{"unknown"}, &stdout, &stderr)
+	code := Run(context.Background(), []string{"unknown"}, nil, &stdout, &stderr)
 
 	if code != 64 {
 		t.Fatalf("exit code = %d, want 64", code)
@@ -85,7 +85,7 @@ func TestRequireLoopbackAddr(t *testing.T) {
 func TestServeRejectsNonLoopbackBind(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 
-	code := Run(context.Background(), []string{"serve", "--addr", "0.0.0.0:0"}, &stdout, &stderr)
+	code := Run(context.Background(), []string{"serve", "--addr", "0.0.0.0:0"}, nil, &stdout, &stderr)
 
 	if code != 64 {
 		t.Fatalf("exit code = %d, want 64", code)
@@ -101,7 +101,7 @@ func TestServeShutsDownOnContextCancel(t *testing.T) {
 
 	done := make(chan int, 1)
 	go func() {
-		done <- Run(ctx, []string{"serve", "--addr", "127.0.0.1:0"}, &stdout, &stderr)
+		done <- Run(ctx, []string{"serve", "--addr", "127.0.0.1:0"}, nil, &stdout, &stderr)
 	}()
 
 	// Wait for the listener to report its bound address before cancelling.

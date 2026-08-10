@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"github.com/ConteMan/muxio/internal/api"
+	"github.com/ConteMan/muxio/internal/app"
+	"github.com/ConteMan/muxio/internal/paths"
+	"github.com/ConteMan/muxio/internal/store/sqlite"
 	"github.com/ConteMan/muxio/internal/version"
 )
 
@@ -22,34 +25,135 @@ Usage:
 
 Commands:
   serve      Start the local HTTP service
+  import     Read JSONL capture records from stdin
+  db         Inspect the local database
   version    Print build version
   help       Show this help
 `
+
+const dbUsage = `Usage:
+  muxio db path    Print the database path without creating it
+`
+
+// Exit codes follow sysexits: 64 is a usage error, 1 is a runtime failure.
+const (
+	exitOK    = 0
+	exitError = 1
+	exitUsage = 64
+)
 
 // errLoopbackOnly reports a listen address outside the loopback interface.
 // ADR-002 forbids remote listening until authentication and a threat model exist.
 var errLoopbackOnly = errors.New("only loopback addresses are allowed")
 
 // Run executes the CLI and returns a process exit code.
-func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		_, _ = io.WriteString(stdout, usage)
-		return 0
+		return exitOK
 	}
 
 	switch args[0] {
 	case "help", "-h", "--help":
 		_, _ = io.WriteString(stdout, usage)
-		return 0
+		return exitOK
 	case "version":
 		_, _ = fmt.Fprintln(stdout, version.String())
-		return 0
+		return exitOK
 	case "serve":
 		return runServe(ctx, args[1:], stdout, stderr)
+	case "import":
+		return runImport(ctx, args[1:], stdin, stdout, stderr)
+	case "db":
+		return runDB(ctx, args[1:], stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "unknown command %q\n\n%s", args[0], usage)
-		return 64
+		return exitUsage
 	}
+}
+
+func runImport(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("import", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	sourceName := flags.String("source", "", "name of the source to import into")
+	if err := flags.Parse(args); err != nil {
+		return exitUsage
+	}
+	if flags.NArg() != 0 {
+		_, _ = fmt.Fprintln(stderr, "import reads records from stdin and takes no positional arguments")
+		return exitUsage
+	}
+	if strings.TrimSpace(*sourceName) == "" {
+		_, _ = fmt.Fprintln(stderr, "import requires --source")
+		return exitUsage
+	}
+
+	store, cleanup, err := openStore(ctx)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "import: %v\n", err)
+		return exitError
+	}
+	defer cleanup()
+
+	result, err := app.ImportJSONL(ctx, store, stdin, stderr, strings.TrimSpace(*sourceName))
+	// Counts are reported even on failure: knowing what landed matters most
+	// exactly when something went wrong.
+	_, _ = fmt.Fprintf(stdout, "imported=%d duplicate=%d failed=%d\n",
+		result.Imported, result.Duplicate, result.Failed)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "import: %v\n", err)
+		return exitError
+	}
+	if result.Failed > 0 {
+		return exitError
+	}
+	return exitOK
+}
+
+func runDB(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		_, _ = io.WriteString(stderr, dbUsage)
+		return exitUsage
+	}
+
+	switch args[0] {
+	case "path":
+		if len(args) != 1 {
+			_, _ = fmt.Fprintln(stderr, "db path takes no arguments")
+			return exitUsage
+		}
+		databasePath, err := paths.Database()
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "db path: %v\n", err)
+			return exitError
+		}
+		_, _ = fmt.Fprintln(stdout, databasePath)
+		return exitOK
+	default:
+		_, _ = fmt.Fprintf(stderr, "unknown db subcommand %q\n\n%s", args[0], dbUsage)
+		return exitUsage
+	}
+}
+
+// openStore resolves the data directory, opens the database, and migrates it.
+func openStore(ctx context.Context) (*sqlite.Store, func(), error) {
+	if _, err := paths.EnsureHome(); err != nil {
+		return nil, nil, err
+	}
+	databasePath, err := paths.Database()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	store, err := sqlite.Open(ctx, databasePath)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := store.Migrate(ctx); err != nil {
+		_ = store.Close()
+		return nil, nil, err
+	}
+	return store, func() { _ = store.Close() }, nil
 }
 
 func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -57,28 +161,28 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	flags.SetOutput(stderr)
 	addr := flags.String("addr", "127.0.0.1:8080", "HTTP listen address")
 	if err := flags.Parse(args); err != nil {
-		return 64
+		return exitUsage
 	}
 	if flags.NArg() != 0 {
 		_, _ = fmt.Fprintln(stderr, "serve does not accept positional arguments")
-		return 64
+		return exitUsage
 	}
 	if err := validateLoopbackAddress(*addr); err != nil {
 		_, _ = fmt.Fprintf(stderr, "invalid --addr: %v\n", err)
-		return 64
+		return exitUsage
 	}
 
 	listener, err := net.Listen("tcp", *addr)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "serve: %v\n", err)
-		return 1
+		return exitError
 	}
 	// The pre-flight check only inspects the requested string. Verify the address
 	// we actually bound so a hostname resolving off loopback cannot slip through.
 	if err := requireLoopbackAddr(listener.Addr()); err != nil {
 		_ = listener.Close()
 		_, _ = fmt.Fprintf(stderr, "invalid --addr: %v\n", err)
-		return 64
+		return exitUsage
 	}
 
 	server := &http.Server{
@@ -101,10 +205,10 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	err = server.Serve(listener)
 	close(stopped)
 	if err == nil || errors.Is(err, http.ErrServerClosed) {
-		return 0
+		return exitOK
 	}
 	_, _ = fmt.Fprintf(stderr, "serve: %v\n", err)
-	return 1
+	return exitError
 }
 
 func validateLoopbackAddress(addr string) error {
