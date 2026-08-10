@@ -57,6 +57,18 @@ muxio runs
 muxio runs show 1
 ```
 
+Inspect and change settings. `config show` labels each value with whether it
+came from the defaults, the file, the environment or a flag:
+
+```sh
+muxio config init
+muxio config show
+muxio config set log.level debug
+```
+
+Muxio rewrites the config file in full and its comments are generated, so
+**comments you add yourself are lost on write**. Credentials do not belong here.
+
 Run the complete quality gate:
 
 ```sh

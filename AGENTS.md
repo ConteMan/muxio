@@ -81,6 +81,7 @@ go run ./cmd/muxio serve
 - `internal/cli/`：CLI 命令与进程编排。
 - `internal/api/`：本地 HTTP API。
 - `internal/app/`：用例编排，不依赖任何适配器。
+- `internal/config/`：配置的读取、校验与原子写入。
 - `internal/record/`：采集记录的规范化与内容哈希等领域规则。
 - `internal/run/`：运行状态机、事件与相关上限。
 - `internal/logging/`：写往 stderr 的结构化日志。

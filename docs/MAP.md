@@ -23,6 +23,8 @@ cmd/muxio
         → internal/store/sqlite   migrations and transactions
     → runs [show <id>]
       → internal/store/sqlite     run history and events
+    → config path|show|init|set
+      → internal/config           file-backed settings and validation
 ```
 
 `api/openapi.yaml` 是 HTTP 行为的公开合同。Handler 与契约必须在同一 PR 变更。存储能力目前只经 CLI 暴露，尚未进入 HTTP API。

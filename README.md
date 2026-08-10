@@ -56,6 +56,16 @@ muxio runs
 muxio runs show 1
 ```
 
+查看和修改设置。`config show` 会逐项标注值来自默认、文件、环境变量还是命令行：
+
+```sh
+muxio config init
+muxio config show
+muxio config set log.level debug
+```
+
+配置文件由程序整份重写，其中的注释是生成的；**你自己添加的注释在写入时会丢失**。凭据不放在这里。
+
 运行全部质量门禁：
 
 ```sh
