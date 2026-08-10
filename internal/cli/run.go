@@ -26,6 +26,10 @@ Commands:
   help       Show this help
 `
 
+// errLoopbackOnly reports a listen address outside the loopback interface.
+// ADR-002 forbids remote listening until authentication and a threat model exist.
+var errLoopbackOnly = errors.New("only loopback addresses are allowed")
+
 // Run executes the CLI and returns a process exit code.
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
@@ -64,8 +68,20 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 		return 64
 	}
 
+	listener, err := net.Listen("tcp", *addr)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "serve: %v\n", err)
+		return 1
+	}
+	// The pre-flight check only inspects the requested string. Verify the address
+	// we actually bound so a hostname resolving off loopback cannot slip through.
+	if err := requireLoopbackAddr(listener.Addr()); err != nil {
+		_ = listener.Close()
+		_, _ = fmt.Fprintf(stderr, "invalid --addr: %v\n", err)
+		return 64
+	}
+
 	server := &http.Server{
-		Addr:              *addr,
 		Handler:           api.NewHandler(version.Version),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -81,8 +97,8 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 		}
 	}()
 
-	_, _ = fmt.Fprintf(stdout, "muxio listening on http://%s\n", *addr)
-	err := server.ListenAndServe()
+	_, _ = fmt.Fprintf(stdout, "muxio listening on http://%s\n", listener.Addr())
+	err = server.Serve(listener)
 	close(stopped)
 	if err == nil || errors.Is(err, http.ErrServerClosed) {
 		return 0
@@ -101,7 +117,15 @@ func validateLoopbackAddress(addr string) error {
 	}
 	ip := net.ParseIP(host)
 	if ip == nil || !ip.IsLoopback() {
-		return errors.New("only loopback addresses are allowed")
+		return errLoopbackOnly
+	}
+	return nil
+}
+
+func requireLoopbackAddr(addr net.Addr) error {
+	tcpAddr, ok := addr.(*net.TCPAddr)
+	if !ok || !tcpAddr.IP.IsLoopback() {
+		return errLoopbackOnly
 	}
 	return nil
 }
