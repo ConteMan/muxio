@@ -39,6 +39,16 @@ curl http://127.0.0.1:8080/healthz
 curl http://127.0.0.1:8080/api/v1/status
 ```
 
+导入记录并确认重复导入不会产生重复数据：
+
+```sh
+muxio db path
+echo '{"external_id":"note-1","title":"标题","body":"正文"}' | muxio import --source notes
+echo '{"external_id":"note-1","title":"标题","body":"正文"}' | muxio import --source notes
+```
+
+第二次输出 `imported=0 duplicate=1 failed=0`。数据库默认位于平台数据目录，`MUXIO_HOME` 可覆盖。
+
 运行全部质量门禁：
 
 ```sh
