@@ -117,8 +117,10 @@ func TestImportReportsFailedLinesAndStillCommitsTheRest(t *testing.T) {
 	if !strings.Contains(result.stdout, "imported=2 duplicate=0 failed=1") {
 		t.Fatalf("stdout = %q", result.stdout)
 	}
-	if !strings.Contains(result.stderr, "line 2:") {
-		t.Fatalf("stderr = %q, want the failing line number", result.stderr)
+	// The rejected line is reported as structured output, not free text.
+	if !strings.Contains(result.stderr, `"msg":"line rejected"`) ||
+		!strings.Contains(result.stderr, `"line":2`) {
+		t.Fatalf("stderr = %q, want a structured record of the failing line", result.stderr)
 	}
 	assertCaptureCount(t, home, 2)
 }
