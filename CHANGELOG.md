@@ -23,6 +23,14 @@ Muxio follows [Semantic Versioning](https://semver.org/). User-visible changes a
   imports are idempotent, changed content is kept as a new version alongside the
   old one, and an invalid line fails on its own without stopping the batch.
 - `muxio db path` prints the database location without creating it.
+- Run history: every import is recorded as a run with its status, timing and
+  counts, and the reason each rejected line was rejected. `muxio runs` lists
+  them and `muxio runs show <id>` explains one, so an import stays diagnosable
+  after the process exits.
+- A run abandoned by a killed process is marked interrupted once its heartbeat
+  goes stale, without disturbing runs another process is still working on.
+- Structured JSON logs on stderr, carrying the run id. `--log-level` and
+  `MUXIO_LOG_LEVEL` select debug, info, warn or error.
 
 ### Changed
 

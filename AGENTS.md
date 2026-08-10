@@ -82,6 +82,8 @@ go run ./cmd/muxio serve
 - `internal/api/`：本地 HTTP API。
 - `internal/app/`：用例编排，不依赖任何适配器。
 - `internal/record/`：采集记录的规范化与内容哈希等领域规则。
+- `internal/run/`：运行状态机、事件与相关上限。
+- `internal/logging/`：写往 stderr 的结构化日志。
 - `internal/store/sqlite/`：迁移、事务与查询，SQLite 相关代码只在这里。
 - `internal/paths/`：配置与数据目录解析。
 - `internal/version/`：构建版本信息。

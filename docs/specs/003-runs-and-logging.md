@@ -1,6 +1,6 @@
 # Spec 003：运行记录与结构化日志
 
-- 状态：草稿
+- 状态：已实现
 - 关联：Roadmap M1 第 2 片、ADR-002、ADR-005、design/data-model.md
 
 ## 问题
@@ -24,8 +24,10 @@ M3 的设置中心要展示的"运行历史"和"失败原因"，事实源就是�
 状态机遵循 data-model：`queued → running → succeeded | partial | failed | canceled | interrupted`。终态不可再转换。
 
 - 每次 `import` 创建一条运行，`trigger = "manual"`。
-- 运行期间定期更新 `heartbeat_at`，为后续识别停滞运行留出依据。
-- 进程启动时，把所有遗留的 `running` 与 `queued` 转为 `interrupted`，并为每条写入一条说明事件。
+- 运行期间按固定间隔更新 `heartbeat_at`。
+- 进程启动时，把心跳已经停滞超过阈值的 `running` 与 `queued` 转为 `interrupted`，并为每条写入一条说明事件。
+
+判定依据必须是心跳而不是"存在非终态运行"：后者会让同时启动的另一个进程把正在正常运行的记录误判为中断。阈值必须显著大于心跳间隔，使繁忙但存活的运行不会被误杀。
 
 结束状态的判定：
 
@@ -73,7 +75,8 @@ muxio runs show <id>        # 运行详情与事件
 
 - 一次 `import` 后，`muxio runs` 显示该次运行的状态、时间与三个计数，且与命令输出一致。
 - 含失败行的导入：运行状态为 `succeeded`，`failed_count` 正确，`muxio runs show` 能列出每个失败行的行号与原因。
-- 导入过程中 `SIGKILL`，重启后 `muxio runs` 中该次运行为 `interrupted`，且带有说明事件；已提交的采集记录不受影响。
+- 导入过程中 `SIGKILL`，心跳停滞超过阈值后再次运行，`muxio runs` 中该次运行为 `interrupted`，且带有说明事件；已提交的采集记录不受影响。
+- 心跳新鲜的运行不会被同时启动的另一个进程判定为中断。
 - 存储错误中止且已有记录提交时，运行状态为 `partial`。
 - 新写入的 capture 带有 `run_id`，可由运行反查到它写入的全部记录。
 - 单次运行产生超过 1000 条失败行时，事件表停在上限并留有截断说明。
