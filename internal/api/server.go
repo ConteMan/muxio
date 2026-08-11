@@ -48,6 +48,9 @@ type Options struct {
 	LoadConfig ConfigLoader
 	SaveConfig ConfigWriter
 	Logger     *slog.Logger
+	// Fallback handles paths this API does not own, so the web panel can serve
+	// its own routes. When nil, unknown paths get the documented 404 shape.
+	Fallback http.Handler
 }
 
 type server struct {
@@ -56,6 +59,7 @@ type server struct {
 	loadConfig ConfigLoader
 	saveConfig ConfigWriter
 	logger     *slog.Logger
+	fallback   http.Handler
 }
 
 // NewHandler creates the local HTTP API handler.
@@ -66,6 +70,7 @@ func NewHandler(options Options) http.Handler {
 		loadConfig: options.LoadConfig,
 		saveConfig: options.SaveConfig,
 		logger:     options.Logger,
+		fallback:   options.Fallback,
 	}
 	if s.logger == nil {
 		s.logger = slog.New(slog.DiscardHandler)
@@ -145,7 +150,13 @@ func (s *server) status(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
+// unknown answers paths no route claimed. An unmatched /api path is always an
+// error, but any other path may belong to the panel's client-side router.
 func (s *server) unknown(w http.ResponseWriter, r *http.Request) {
+	if s.fallback != nil && !strings.HasPrefix(r.URL.Path, "/api/") {
+		s.fallback.ServeHTTP(w, r)
+		return
+	}
 	notFound(w, "no such endpoint: "+r.URL.Path)
 }
 

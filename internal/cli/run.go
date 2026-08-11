@@ -19,6 +19,7 @@ import (
 	"github.com/ConteMan/muxio/internal/paths"
 	"github.com/ConteMan/muxio/internal/store/sqlite"
 	"github.com/ConteMan/muxio/internal/version"
+	"github.com/ConteMan/muxio/internal/webui"
 )
 
 const usage = `Muxio is a local-first personal information capture core.
@@ -294,6 +295,7 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 			LoadConfig: loadConfig,
 			SaveConfig: saveConfig,
 			Logger:     logger,
+			Fallback:   webui.Handler(),
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -309,6 +311,9 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 		}
 	}()
 
+	if !webui.Available() {
+		logger.Warn("the web panel is not embedded in this binary; API is still served")
+	}
 	_, _ = fmt.Fprintf(stdout, "muxio listening on http://%s\n", listener.Addr())
 	err = server.Serve(listener)
 	close(stopped)

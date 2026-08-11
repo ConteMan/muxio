@@ -4,9 +4,9 @@
 /coverage.out
 /muxio
 
-# Web
+# Web. The build output in internal/webui/assets is deliberately committed:
+# it ships inside the binary (ADR-007).
 /web/node_modules/
-/web/dist/
 /web/test-results/
 /web/playwright-report/
 
