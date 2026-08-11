@@ -32,7 +32,7 @@ Muxio 是本地优先的个人信息采集核心。当前第一目标是稳定�
 1. 稳定采集优先；Roadmap 明确排除的高层产品能力不得顺手实现。
 2. 改架构、持久化模型、配置 schema、公开 CLI 或 HTTP API 前，先更新 Design、ADR 或 Spec；接口变化先改 `api/openapi.yaml`。
 3. 核心保持 Go 单二进制和 SQLite；不得引入消息队列、外部数据库或无真实需求的服务拆分。
-4. `web/` 是独立工程，只消费 HTTP API；Go 构建不得依赖 Node，Web 不得读取 SQLite 或承载采集业务规则。
+4. `web/` 是独立工程，只消费 HTTP API；Web 不得读取 SQLite 或承载采集业务规则。构建产物提交至 `internal/webui/assets/` 并随二进制嵌入（ADR-007），因此 `go build` 仍不得依赖 Node。
 5. 本地 HTTP 服务只允许 loopback；远程监听必须先完成认证与威胁模型设计。
 6. 连接器先以内置 Go 实现验证接口，不冻结外部 SDK、动态插件 ABI 或进程协议。
 7. 时间入库和 API 输出统一使用 RFC3339 UTC；展示层负责时区转换。
@@ -68,10 +68,12 @@ Muxio 是本地优先的个人信息采集核心。当前第一目标是稳定�
 ## 常用命令
 
 ```sh
-make bootstrap
+make bootstrap        # Go 依赖 + web 依赖
 make status
-make check
-go run ./cmd/muxio version
+make check            # 统一门禁，含面板产物与生成类型的时效校验
+make web-dev          # 前端开发服务器，API 代理到本地 muxio serve
+make web-build        # 重建嵌入产物，改前端后必须执行并提交
+make panel-smoke      # 用真实二进制跑浏览器冒烟
 go run ./cmd/muxio serve
 ```
 
@@ -89,7 +91,8 @@ go run ./cmd/muxio serve
 - `internal/paths/`：配置与数据目录解析。
 - `internal/version/`：构建版本信息。
 - `api/openapi.yaml`：跨核心与 Web 的公开接口合同。
-- `web/`：独立 Web 工程边界；当前尚未引入工具链。
+- `web/`：Web 面板源码，独立工程；构建输出到 `internal/webui/assets/`。
+- `internal/webui/`：随二进制嵌入的面板产物与静态托管。
 - `docs/design/`：当前架构与数据设计。
 - `docs/decisions/`：不可静默推翻的 ADR。
 - `docs/specs/`：可独立实现和验收的规格。

@@ -42,11 +42,12 @@ cmd/muxio
 
 ## Core 与 Web
 
-- OpenAPI 是唯一跨工程类型合同。
-- Go 构建、测试和发布不依赖 Node。
+- OpenAPI 是唯一跨工程类型合同，客户端类型由它生成而非手写。
+- Web 源码在 `web/`，构建产物在 `internal/webui/assets/` 并提交进仓库，由 `go:embed` 随二进制交付（[ADR-007](../decisions/007-embedded-web-ui.md)）。`go build` 因此仍不依赖 Node。
+- `muxio serve` 同时提供 API 与面板，用户不需要额外进程。
 - Web 不访问 SQLite、采集目录或连接器实现。
-- Core 与 Web 允许独立版本和独立发布。
-- 当前不建立共享源码包；生成客户端只能来自发布的 OpenAPI。
+- 前端与核心不再有独立版本号；行为差异由 `/api/v1` 的契约表达。
+- 当前不建立共享源码包。
 
 ## 配置与数据目录
 
