@@ -54,6 +54,8 @@ cmd/muxio
 
 `config.toml` 是配置的唯一事实源，数据库不保存配置；凭据存放在独立的 `credentials.toml` 且永不入库。两者的写入语义与保护方式见 [ADR-005](../decisions/005-config-and-credential-storage.md)。
 
+并发修改由文件内容指纹检测，而非修改时间（[ADR-006](../decisions/006-config-fingerprint.md)）。CLI 与 HTTP 共用同一实现，HTTP 层把它暴露为 `ETag` 并要求 `If-Match`。
+
 导出路径必须显式指定。任何凭据、数据库和个人采集内容都不得进入 Git 仓库。
 
 ## 日志与运行可观测性
