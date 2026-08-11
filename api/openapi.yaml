@@ -138,10 +138,84 @@ paths:
       responses:
         "200":
           description: The effective configuration.
+          headers:
+            ETag:
+              description: Fingerprint of the configuration file, for use with If-Match.
+              required: true
+              schema:
+                type: string
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Config"
+        "500":
+          $ref: "#/components/responses/Internal"
+    put:
+      operationId: replaceConfig
+      summary: Replace the configuration file
+      description: |
+        Writes the whole configuration. Every known setting must be present:
+        omitting one would silently reset it to its default.
+
+        `If-Match` is required and must carry the `ETag` from a preceding GET.
+        A stale value means someone else changed the file first, and the write
+        is refused rather than overwriting their edit (ADR-005, ADR-006).
+
+        The write lands in the file. A setting currently overridden by the
+        environment keeps its overridden effective value, and the response
+        reports its origin as `env`.
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          description: The ETag the edit was based on.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfigUpdate"
+      responses:
+        "200":
+          description: The configuration was written.
+          headers:
+            ETag:
+              description: Fingerprint of the newly written file.
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Config"
+        "400":
+          $ref: "#/components/responses/InvalidArgument"
+        "412":
+          description: The file changed since the ETag was issued.
+          headers:
+            ETag:
+              description: The current fingerprint.
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: The request body is too large.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "428":
+          description: If-Match was not supplied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/Internal"
 components:
@@ -231,6 +305,9 @@ components:
             - invalid_argument
             - not_found
             - method_not_allowed
+            - precondition_required
+            - precondition_failed
+            - payload_too_large
             - internal
         message:
           type: string
@@ -412,6 +489,26 @@ components:
             - file
             - env
             - flag
+    ConfigUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - settings
+      properties:
+        settings:
+          type: array
+          description: Every known setting. A missing one is an error, not a reset.
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - key
+              - value
+            properties:
+              key:
+                type: string
+              value:
+                type: string
     Config:
       type: object
       additionalProperties: false

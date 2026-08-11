@@ -1,13 +1,14 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // filePerm keeps configuration readable by its owner only.
@@ -15,6 +16,27 @@ const filePerm os.FileMode = 0o600
 
 // ErrConflict reports that the file changed between reading and writing.
 var ErrConflict = errors.New("config file changed since it was read")
+
+// AbsentFingerprint is the fingerprint of a configuration that does not exist
+// yet. Writing with it means "I believe there is no file", so two racing
+// creations cannot both succeed.
+const AbsentFingerprint = "absent"
+
+// Fingerprint identifies the exact bytes on disk. ADR-006 uses content rather
+// than modification time: timestamps differ in precision across file systems,
+// are rewritten by backup tools without the content changing, and can stay
+// equal across two writes within the same second.
+func Fingerprint(path string) (string, error) {
+	content, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return AbsentFingerprint, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read config %s: %w", path, err)
+	}
+	sum := sha256.Sum256(content)
+	return hex.EncodeToString(sum[:16]), nil
+}
 
 // ErrExists reports an attempt to create a configuration that already exists.
 var ErrExists = errors.New("config file already exists")
@@ -54,24 +76,21 @@ func renderValue(c *Config, f field) string {
 
 // Write renders the configuration and replaces the file atomically.
 //
-// When expected is non-zero it must match the file's current modification time;
+// When expected is non-empty it must match the file's current fingerprint;
 // otherwise the write is refused. This is what stops a settings UI from
 // overwriting an edit someone made by hand in the meantime.
-func Write(path string, c Config, expected time.Time) error {
+func Write(path string, c Config, expected string) error {
 	if err := c.Validate(); err != nil {
 		return err
 	}
 
-	if !expected.IsZero() {
-		current, err := TouchedAt(path)
+	if expected != "" {
+		current, err := Fingerprint(path)
 		if err != nil {
 			return err
 		}
-		if !current.Equal(expected) {
-			return fmt.Errorf("%w: read at %s, now %s",
-				ErrConflict,
-				expected.UTC().Format(time.RFC3339),
-				current.UTC().Format(time.RFC3339))
+		if current != expected {
+			return fmt.Errorf("%w: based on %s, now %s", ErrConflict, expected, current)
 		}
 	}
 

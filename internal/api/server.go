@@ -9,7 +9,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/ConteMan/muxio/internal/config"
 	"github.com/ConteMan/muxio/internal/store/sqlite"
@@ -35,11 +37,16 @@ type Reader interface {
 // ConfigLoader reports the effective configuration and where it came from.
 type ConfigLoader func() (config.Loaded, error)
 
+// ConfigWriter persists a configuration, refusing the write when the file no
+// longer matches the fingerprint the edit was based on.
+type ConfigWriter func(cfg config.Config, expectedFingerprint string) error
+
 // Options carries what the handler needs beyond storage.
 type Options struct {
 	Version    string
 	Store      Reader
 	LoadConfig ConfigLoader
+	SaveConfig ConfigWriter
 	Logger     *slog.Logger
 }
 
@@ -47,6 +54,7 @@ type server struct {
 	version    string
 	store      Reader
 	loadConfig ConfigLoader
+	saveConfig ConfigWriter
 	logger     *slog.Logger
 }
 
@@ -56,39 +64,57 @@ func NewHandler(options Options) http.Handler {
 		version:    options.Version,
 		store:      options.Store,
 		loadConfig: options.LoadConfig,
+		saveConfig: options.SaveConfig,
 		logger:     options.Logger,
 	}
 	if s.logger == nil {
 		s.logger = slog.New(slog.DiscardHandler)
 	}
 
-	routes := map[string]http.HandlerFunc{
-		"/healthz":                 s.health,
-		"/readyz":                  s.ready,
-		"/api/v1/status":           s.status,
-		"/api/v1/sources":          s.listSources,
-		"/api/v1/runs":             s.listRuns,
-		"/api/v1/runs/{id}":        s.getRun,
-		"/api/v1/runs/{id}/events": s.listRunEvents,
-		"/api/v1/config":           s.getConfig,
+	// Each path lists the methods it answers, so a wrong method can be reported
+	// with the documented error shape and an accurate Allow header.
+	routes := []route{
+		{path: "/healthz", handlers: map[string]http.HandlerFunc{"GET": s.health}},
+		{path: "/readyz", handlers: map[string]http.HandlerFunc{"GET": s.ready}},
+		{path: "/api/v1/status", handlers: map[string]http.HandlerFunc{"GET": s.status}},
+		{path: "/api/v1/sources", handlers: map[string]http.HandlerFunc{"GET": s.listSources}},
+		{path: "/api/v1/runs", handlers: map[string]http.HandlerFunc{"GET": s.listRuns}},
+		{path: "/api/v1/runs/{id}", handlers: map[string]http.HandlerFunc{"GET": s.getRun}},
+		{path: "/api/v1/runs/{id}/events", handlers: map[string]http.HandlerFunc{"GET": s.listRunEvents}},
+		{path: "/api/v1/config", handlers: map[string]http.HandlerFunc{
+			"GET": s.getConfig,
+			"PUT": s.putConfig,
+		}},
 	}
 
 	mux := http.NewServeMux()
-	for path, handler := range routes {
-		mux.HandleFunc("GET "+path, handler)
-		// ServeMux would answer a wrong method with a bare body. Registering a
-		// method-less pattern per path lets the response keep the documented
-		// error shape; the GET pattern above is more specific and still wins.
-		mux.HandleFunc(path, s.methodNotAllowed)
+	for _, r := range routes {
+		methods := make([]string, 0, len(r.handlers))
+		for method, handler := range r.handlers {
+			mux.HandleFunc(method+" "+r.path, handler)
+			methods = append(methods, method)
+		}
+		sort.Strings(methods)
+		// ServeMux would answer a wrong method with a bare body. A method-less
+		// pattern keeps the documented shape; the patterns above are more
+		// specific and still win.
+		mux.HandleFunc(r.path, s.methodNotAllowed(strings.Join(methods, ", ")))
 	}
 	mux.HandleFunc("/", s.unknown)
 	return mux
 }
 
-func (s *server) methodNotAllowed(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Allow", http.MethodGet)
-	writeError(w, http.StatusMethodNotAllowed, CodeMethodNotAllowed,
-		r.Method+" is not supported on this endpoint", "")
+type route struct {
+	path     string
+	handlers map[string]http.HandlerFunc
+}
+
+func (s *server) methodNotAllowed(allowed string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Allow", allowed)
+		writeError(w, http.StatusMethodNotAllowed, CodeMethodNotAllowed,
+			r.Method+" is not supported on this endpoint", "")
+	}
 }
 
 func (s *server) health(w http.ResponseWriter, _ *http.Request) {
@@ -243,39 +269,6 @@ func (s *server) listRunEvents(w http.ResponseWriter, r *http.Request) {
 		nextBefore = &items[len(items)-1].ID
 	}
 	writeJSON(w, http.StatusOK, runEventPage{Items: items, NextBefore: nextBefore})
-}
-
-func (s *server) getConfig(w http.ResponseWriter, r *http.Request) {
-	if s.loadConfig == nil {
-		internalError(w, s.logFailure(r), errNoConfigLoader)
-		return
-	}
-
-	loaded, err := s.loadConfig()
-	if err != nil {
-		internalError(w, s.logFailure(r), err)
-		return
-	}
-
-	settings := make([]configSettingView, 0, len(config.Keys()))
-	for _, key := range config.Keys() {
-		value, err := config.Get(loaded.Config, key)
-		if err != nil {
-			internalError(w, s.logFailure(r), err)
-			return
-		}
-		settings = append(settings, configSettingView{
-			Key:    key,
-			Value:  value,
-			Origin: string(loaded.Origin(key)),
-		})
-	}
-
-	writeJSON(w, http.StatusOK, configView{
-		Path:     loaded.Path,
-		Exists:   loaded.Exists,
-		Settings: settings,
-	})
 }
 
 func (s *server) logFailure(r *http.Request) func(error) {

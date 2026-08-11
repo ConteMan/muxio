@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -58,16 +57,16 @@ func Load(path string, lookupEnv func(string) (string, bool)) (Loaded, error) {
 }
 
 func applyFile(loaded *Loaded, path string) error {
-	info, err := os.Stat(path)
-	if errors.Is(err, os.ErrNotExist) {
+	fingerprint, err := Fingerprint(path)
+	if err != nil {
+		return err
+	}
+	loaded.Fingerprint = fingerprint
+	if fingerprint == AbsentFingerprint {
 		// An absent file is not an error: an unconfigured Muxio must run.
 		return nil
 	}
-	if err != nil {
-		return fmt.Errorf("read config %s: %w", path, err)
-	}
 	loaded.Exists = true
-	loaded.ModTime = info.ModTime()
 
 	var shape fileShape
 	meta, err := toml.DecodeFile(path, &shape)
@@ -196,17 +195,4 @@ func (l *Loaded) Override(key, value string) error {
 	l.Config = updated
 	l.Origins[key] = FromFlag
 	return nil
-}
-
-// TouchedAt reports the file's current modification time, or the zero value if
-// it does not exist.
-func TouchedAt(path string) (time.Time, error) {
-	info, err := os.Stat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return time.Time{}, nil
-	}
-	if err != nil {
-		return time.Time{}, fmt.Errorf("stat config %s: %w", path, err)
-	}
-	return info.ModTime(), nil
 }

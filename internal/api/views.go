@@ -9,6 +9,9 @@ import (
 // errNoConfigLoader reports a handler built without configuration access.
 var errNoConfigLoader = errors.New("no configuration loader was provided")
 
+// errNoConfigWriter reports a handler built without the ability to persist.
+var errNoConfigWriter = errors.New("no configuration writer was provided")
+
 // The view types below are the published wire shapes. They are deliberately
 // separate from the storage structs so a column rename cannot silently change
 // the contract in api/openapi.yaml.
