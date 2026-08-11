@@ -219,6 +219,7 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	addr := flags.String("addr", "", "HTTP listen address (overrides config)")
+	logLevel := flags.String("log-level", "", "debug, info, warn or error")
 	if err := flags.Parse(args); err != nil {
 		return exitUsage
 	}
@@ -232,6 +233,12 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 		_, _ = fmt.Fprintf(stderr, "serve: %v\n", err)
 		return exitError
 	}
+	if isFlagSet(flags, "log-level") {
+		if err := loaded.Override("log.level", *logLevel); err != nil {
+			_, _ = fmt.Fprintf(stderr, "serve: %v\n", err)
+			return exitUsage
+		}
+	}
 	if isFlagSet(flags, "addr") {
 		if err := loaded.Override("server.addr", *addr); err != nil {
 			_, _ = fmt.Fprintf(stderr, "invalid --addr: %v\n", err)
@@ -243,6 +250,28 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	if err := validateLoopbackAddress(listenAddr); err != nil {
 		_, _ = fmt.Fprintf(stderr, "invalid listen address: %v\n", err)
 		return exitUsage
+	}
+
+	logger, err := newLogger(loaded.Config.Log.Level, stderr)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "serve: %v\n", err)
+		return exitUsage
+	}
+
+	// The service is the long-lived process, so it opens storage and performs
+	// the same interrupted-run recovery an import does.
+	store, cleanup, err := openStore(ctx)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "serve: %v\n", err)
+		return exitError
+	}
+	defer cleanup()
+
+	if recovered, err := store.RecoverStaleRuns(ctx); err != nil {
+		_, _ = fmt.Fprintf(stderr, "serve: %v\n", err)
+		return exitError
+	} else if recovered > 0 {
+		logger.Warn("marked stale runs as interrupted", "count", recovered)
 	}
 
 	listener, err := net.Listen("tcp", listenAddr)
@@ -259,7 +288,12 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	}
 
 	server := &http.Server{
-		Handler:           api.NewHandler(version.Version),
+		Handler: api.NewHandler(api.Options{
+			Version:    version.Version,
+			Store:      store,
+			LoadConfig: loadConfig,
+			Logger:     logger,
+		}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

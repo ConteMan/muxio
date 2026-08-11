@@ -58,4 +58,11 @@ M1 分片交付，每片一个 Spec、一个可独立评审和回滚的 PR；前
 
 凭据存储的约束已由 [ADR-005](decisions/005-config-and-credential-storage.md) 立好，但首期两个连接器都不需要认证，因此实现推迟到 M4 出现需要认证的来源时。
 
+## M2 切片顺序
+
+| 顺序 | 切片 | 承载 | 验证的核心假设 |
+|---|---|---|---|
+| 1 | 只读 HTTP API | [Spec 005](specs/005-read-api.md) | 面板需要的全部数据都能经 API 取得，不必读 SQLite |
+| 2 | 配置写入 API | 待补 Spec | 界面写入与手工编辑冲突时能被检出而不是覆盖 |
+
 修改 v0.1 In / Out 边界必须由维护者确认，并同步 Roadmap 和相关 Spec。
