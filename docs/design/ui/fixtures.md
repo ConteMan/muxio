@@ -72,6 +72,35 @@ error  line 842 rejected: invalid JSON: invalid character 'x' looking for beginn
 
 58 字符，单行显示会溢出窄屏。
 
+## 界面文案（中英对照）
+
+i18n 上线后布局必须在两种语言下都成立。中文普遍更短，英文更长——**只按一种语言画的稿会在另一种语言下碎掉**。
+
+| 键 | 中文 | 英文 | 字符数 |
+|---|---|---|---|
+| `nav.runs` | 运行历史 | Run history | 4 / 11 |
+| `nav.settings` | 设置 | Settings | 2 / 8 |
+| `runs.empty` | 还没有运行记录 | No runs recorded yet | 7 / 20 |
+| `runs.column.imported` | 已导入 | Imported | 3 / 8 |
+| `runs.column.duplicate` | 重复 | Duplicate | 2 / 9 |
+| `run.status.interrupted` | 已中断 | Interrupted | 3 / 11 |
+| `run.events.truncated` | 事件已截断：本次运行达到事件上限 | Event log truncated: this run reached its event limit | 16 / 52 |
+| `settings.origin.env` | 来自环境变量 | From environment | 6 / 16 |
+| `settings.env.warning` | 此项被环境变量覆盖，修改配置文件不会改变生效值，需先取消该环境变量 | Overridden by an environment variable — editing the file will not change the effective value until that is unset | 32 / 113 |
+| `settings.restart` | 已保存。重启 muxio serve 后生效 | Saved. Restart muxio serve for it to take effect | 17 / 47 |
+
+最长的一条英文 113 字符，是设置页 `env` 警告。它决定了设置项右侧区域的最小可用宽度。
+
+## 主题
+
+| 主题 | 触发 | 验收 |
+|---|---|---|
+| 跟随系统 | 默认；`prefers-color-scheme` | 切换系统外观时界面立即跟随，无需刷新 |
+| 浅色 | 用户显式选择 | 系统为深色时仍保持浅色 |
+| 深色 | 用户显式选择 | 系统为浅色时仍保持深色 |
+
+三种状态在画板中都必须存在。只画浅色再"假设深色能行"不合格——状态徽标的七种颜色在深色底上的对比度必须单独验证。
+
 ## 错误响应
 
 面板必须能渲染这四种，全部来自真实端点：
