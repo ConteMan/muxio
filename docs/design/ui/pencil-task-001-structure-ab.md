@@ -1,0 +1,71 @@
+# Pencil Task 001：Muxio 面板结构 A/B 探索
+
+> 类型：低保真结构探索
+> 执行方式：单一 Pencil 编辑者串行完成
+> 上游 brief：`docs/design/ui/exploration-brief.md`
+
+## 1. 目标
+
+使用完全相同的用户任务、fixture、状态与视口，对比两种面板结构：
+
+- **方向 A：列表优先**——打开即运行列表，点击进入详情页。接近 `muxio runs` 的心智。
+- **方向 B：结论优先**——首屏顶部是最近一次运行的结论，历史列表在其下。
+
+本任务只回答结构问题：
+
+1. 维护者能否在几秒内判断最近一次采集是否可信？
+2. `succeeded` 但有失败行的运行，会不会被读成"完全没问题"？
+3. `interrupted` 与 `partial` 是否传达出"数据仍在"？
+4. 1001 条事件与 96 字符消息下，事件时间线是否仍可读？
+5. `env` 覆盖是否强到不会被忽略？
+6. 七列的运行表在 390px 下如何取舍？
+
+本任务不是视觉定稿，不建设完整设计系统，不评价品牌风格、动效或装饰精度。
+
+## 2. 输入文件
+
+编辑者开始前必须读取：
+
+1. `docs/design/ui/exploration-brief.md`——阶段门禁、A/B 假设与验收原则。
+2. `docs/design/ui/flows/m3-panel.md`——主路径与完整状态矩阵。
+3. `docs/design/ui/fixtures.md`——真实规模内容，所有画板一律使用。
+4. `docs/design/ui/contract-gaps.md`——哪些能力不存在，不得在画板中出现。
+5. `docs/design/ui/screen-inventory.md`——画板清单与验收门槛。
+6. `api/openapi.yaml`——字段与状态枚举的事实源。
+7. `web/src/`——当前已实现能力，**不代表目标结构**。
+
+## 3. 输出文件与编辑边界
+
+唯一输出：`docs/design/ui/prototypes/muxio-ui-explorations.pen`。
+
+不得修改 `web/`、`internal/`、`api/openapi.yaml` 或任何 Spec。发现契约问题时记入 `contract-gaps.md` 并停止，不在画板中"顺手解决"。
+
+## 4. 画板要求
+
+每个方向各产出：
+
+| 画板 | 视口 | 必须包含的状态 |
+|---|---|---|
+| `A/B — Runs` | 1440px | 正常（7 条 fixture 运行全在）、空、加载中、请求失败 |
+| `A/B — Run Detail` | 1440px | `succeeded` 含失败行、`interrupted`、`running`、事件截断、无事件 |
+| `A/B — Settings` | 1440px | `env` 覆盖、文件不存在、长路径 |
+| `A/B — Narrow Runs` | 390px | 正常与空 |
+
+八个顶层画板，两两可并排对比。低保真：结构、层级、信息密度与状态表达为主，不做精细视觉。
+
+## 5. 硬性约束
+
+- 只使用 fixtures.md 的内容。出现"Lorem"、`Source 1`、`123` 这类占位即不合格。
+- 不得出现 CG-04、CG-05、CG-06、CG-10 对应的入口、按钮或占位，包括 disabled 状态。
+- 七种运行状态的表达不得只靠颜色。
+- 390px 画板不得出现页面级横向溢出。
+- 每个状态在 `.pen` 中可独立定位，不靠一张图里"想象另一个状态"。
+
+## 6. 完成定义
+
+1. 八个画板齐备且非空；
+2. 每个画板的状态可从源文件直接定位；
+3. 对每个画板运行布局检查，无裁切与意外溢出；
+4. 导出 PNG 快照到 `reviews/2026-08-11-assets/`，命名 `<画板 slug>-<节点 ID>.png`；
+5. 评审记录写入 `reviews/2026-08-11-structure-ab.md`，逐条回答第 1 节的六个问题，并给出推荐方向与理由；
+6. 维护者选定方向前，不进入 Foundations 与视觉阶段。

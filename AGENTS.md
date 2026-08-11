@@ -30,7 +30,7 @@ Muxio 是本地优先的个人信息采集核心。当前第一目标是稳定�
 ## 硬规则
 
 1. 稳定采集优先；Roadmap 明确排除的高层产品能力不得顺手实现。
-2. 改架构、持久化模型、配置 schema、公开 CLI 或 HTTP API 前，先更新 Design、ADR 或 Spec；接口变化先改 `api/openapi.yaml`。
+2. 改架构、持久化模型、配置 schema、公开 CLI 或 HTTP API 前，先更新 Design、ADR 或 Spec；接口变化先改 `api/openapi.yaml`。界面结构变化先更新 `docs/design/ui/` 并在 `.pen` 中收口，不直接改组件。
 3. 核心保持 Go 单二进制和 SQLite；不得引入消息队列、外部数据库或无真实需求的服务拆分。
 4. `web/` 是独立工程，只消费 HTTP API；Web 不得读取 SQLite 或承载采集业务规则。构建产物提交至 `internal/webui/assets/` 并随二进制嵌入（ADR-007），因此 `go build` 仍不得依赖 Node。
 5. 本地 HTTP 服务只允许 loopback；远程监听必须先完成认证与威胁模型设计。
@@ -94,6 +94,7 @@ go run ./cmd/muxio serve
 - `web/`：Web 面板源码，独立工程；构建输出到 `internal/webui/assets/`。
 - `internal/webui/`：随二进制嵌入的面板产物与静态托管。
 - `docs/design/`：当前架构与数据设计。
+- `docs/design/ui/`：面板流程、状态矩阵、合同缺口、Pencil 原型与评审记录。
 - `docs/decisions/`：不可静默推翻的 ADR。
 - `docs/specs/`：可独立实现和验收的规格。
 - `scripts/selftest.sh`：本地与 CI 共用的统一门禁。
