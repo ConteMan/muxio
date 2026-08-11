@@ -1,4 +1,4 @@
-.PHONY: bootstrap fmt test vet build api-check check status
+.PHONY: bootstrap fmt test vet build api-check check status web-install web-dev web-build panel-smoke
 
 # Release identity comes from Git; there is no second hard-coded version.
 VERSION ?= $(shell git describe --tags --dirty 2>/dev/null || echo dev)
@@ -11,6 +11,19 @@ LDFLAGS := -X $(VERSION_PKG).Version=$(VERSION) \
 
 bootstrap:
 	go mod download
+	npm --prefix web ci
+
+web-install:
+	npm --prefix web ci
+
+web-dev:
+	npm --prefix web run dev
+
+web-build:
+	npm --prefix web run build
+
+panel-smoke:
+	./scripts/panel-smoke.sh
 
 fmt:
 	gofmt -w cmd internal
