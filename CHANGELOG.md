@@ -39,6 +39,12 @@ Muxio follows [Semantic Versioning](https://semver.org/). User-visible changes a
 - `muxio config init`, `show`, `set` and `path`. Writes are atomic and refuse to
   clobber a file that changed since it was read. Generated comments survive a
   write; comments you add yourself do not.
+- Read endpoints under `/api/v1` for sources, runs, run events and the effective
+  configuration, with cursor paging and one documented error shape. This is the
+  only way a client is allowed to reach Muxio's data.
+- `muxio serve` now opens the database, recovers runs abandoned by a killed
+  process, and reports storage reachability through `/readyz`. `/healthz` stays
+  a pure liveness check so a storage outage does not look like a dead process.
 
 ### Changed
 
