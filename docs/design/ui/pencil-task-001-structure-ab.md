@@ -42,6 +42,10 @@
 
 唯一输出：`docs/design/ui/prototypes/muxio-ui-explorations.pen`。
 
+**开工前置**：该文件必须已存在。Pencil 的 `execute` 的 `filePath` 只对已存在的 `.pen` 生效；指向不存在的路径时不报错，而是静默作用于**当前活跃的画布编辑器**——那可能是另一个项目的设计文件。因此必须先由维护者在 Pencil 应用中创建该文件，并确认它是活跃编辑器，然后才能开始。
+
+每次 `execute` 前用 `get_app_state` 确认活跃文件是本任务的输出文件。
+
 不得修改 `web/`、`internal/`、`api/openapi.yaml` 或任何 Spec。发现契约问题时记入 `contract-gaps.md` 并停止，不在画板中"顺手解决"。
 
 ## 4. 画板要求
