@@ -32,6 +32,8 @@ go run ./cmd/muxio version
 go run ./cmd/muxio serve
 ```
 
+浏览器打开监听地址即是面板：运行历史、运行详情与设置。面板随二进制一起交付，不需要额外进程。
+
 另一个终端验证。`/readyz` 反映数据库是否可达，`/healthz` 只表示进程存活：
 
 ```sh
@@ -80,10 +82,10 @@ make check
 - `cmd/muxio/`：Go 单二进制入口。
 - `internal/`：核心实现，不作为公共 SDK。
 - `api/openapi.yaml`：核心与 Web 的公开合同。
-- `web/`：独立 Web 工程边界。
 - `docs/`：设计、ADR、Roadmap 和 Specs。
 - `scripts/selftest.sh`：本地与 CI 共用门禁。
 - `scripts/status.sh`：`make status`，全局进度与待决策事项。
+- `web/`：面板源码；产物在 `internal/webui/assets/`，随二进制嵌入。
 
 详细入口见 [项目地图](docs/MAP.md) 和 [架构设计](docs/design/architecture.md)。
 

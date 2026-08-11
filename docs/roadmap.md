@@ -65,4 +65,13 @@ M1 分片交付，每片一个 Spec、一个可独立评审和回滚的 PR；前
 | 1 | 只读 HTTP API | [Spec 005](specs/005-read-api.md) | 面板需要的全部数据都能经 API 取得，不必读 SQLite |
 | 2 | 配置写入 API | [Spec 006](specs/006-config-write-api.md) | 界面写入与手工编辑冲突时能被检出而不是覆盖 |
 
+## M3 切片顺序
+
+| 顺序 | 切片 | 承载 | 验证的核心假设 |
+|---|---|---|---|
+| 1 | 前端工具链与观察面板 | [Spec 007](specs/007-web-observation.md) | 面板随二进制交付，维护者能在浏览器里验收运行与配置 |
+| 2 | 配置编辑 | 待补 Spec | 界面改配置与 CLI、手工编辑共用同一套冲突保护 |
+
+面板交付形态见 [ADR-007](decisions/007-embedded-web-ui.md)：构建产物提交进仓库并随二进制嵌入，因此 `go build` 仍不依赖 Node。
+
 修改 v0.1 In / Out 边界必须由维护者确认，并同步 Roadmap 和相关 Spec。

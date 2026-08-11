@@ -47,6 +47,10 @@ Muxio follows [Semantic Versioning](https://semver.org/). User-visible changes a
 - `PUT /api/v1/config` writes the configuration. It requires `If-Match` carrying
   the `ETag` from a preceding read, so a settings page cannot overwrite an edit
   someone made by hand in the meantime.
+- A web panel served by `muxio serve` on the same port as the API: run history,
+  run detail with its event timeline, and a read-only settings view labelling
+  where each value came from. It ships inside the binary, so there is nothing
+  extra to install or run.
 
 ### Changed
 
