@@ -17,6 +17,7 @@ cmd/muxio
         → GET /api/v1/sources
         → GET /api/v1/runs[/{id}][/events]
         → GET /api/v1/config
+        → PUT /api/v1/config          conditional write, If-Match required
     → db path
       → internal/paths            data directory resolution
     → import
@@ -31,7 +32,7 @@ cmd/muxio
       → internal/config           file-backed settings and validation
 ```
 
-`api/openapi.yaml` 是 HTTP 行为的公开合同。Handler 与契约必须在同一 PR 变更。读路径已进入 HTTP API；写入仍只经 CLI。
+`api/openapi.yaml` 是 HTTP 行为的公开合同。Handler 与契约必须在同一 PR 变更。读路径与配置写入已进入 HTTP API；采集数据的写入仍只经 CLI。
 
 ## 目标采集路径
 

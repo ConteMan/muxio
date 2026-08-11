@@ -16,7 +16,6 @@ Muxio follows [Semantic Versioning](https://semver.org/). User-visible changes a
 - `selftest` now verifies that ADR and spec indexes are complete in both
   directions, and that the English README and contributing mirrors keep the same
   section structure as their Chinese sources.
-
 - SQLite storage: an embedded migration framework, the `sources` and `captures`
   tables, and owner-only data directory resolution overridable with `MUXIO_HOME`.
 - `muxio import --source <name>` reads JSONL capture records from stdin. Repeated
@@ -45,11 +44,18 @@ Muxio follows [Semantic Versioning](https://semver.org/). User-visible changes a
 - `muxio serve` now opens the database, recovers runs abandoned by a killed
   process, and reports storage reachability through `/readyz`. `/healthz` stays
   a pure liveness check so a storage outage does not look like a dead process.
+- `PUT /api/v1/config` writes the configuration. It requires `If-Match` carrying
+  the `ETag` from a preceding read, so a settings page cannot overwrite an edit
+  someone made by hand in the meantime.
 
 ### Changed
 
 - The required Go toolchain is now `1.25` instead of the patch-level `1.25.9`.
 - `cli.Run` takes stdin, since commands now read from it.
+- Concurrent edits to the configuration are now detected by hashing the file's
+  contents rather than comparing its modification time. Timestamps differ in
+  precision between file systems, are rewritten by backup tools without the
+  content changing, and can stay equal across two writes in the same second.
 
 ### Fixed
 
