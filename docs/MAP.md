@@ -9,10 +9,14 @@ cmd/muxio
   → internal/cli
     → version
     → serve
+      → internal/store/sqlite     opened for the process lifetime
       → internal/api
-        → GET /healthz
-        → GET /readyz
+        → GET /healthz                        process liveness
+        → GET /readyz                         storage reachability
         → GET /api/v1/status
+        → GET /api/v1/sources
+        → GET /api/v1/runs[/{id}][/events]
+        → GET /api/v1/config
     → db path
       → internal/paths            data directory resolution
     → import
@@ -27,7 +31,7 @@ cmd/muxio
       → internal/config           file-backed settings and validation
 ```
 
-`api/openapi.yaml` 是 HTTP 行为的公开合同。Handler 与契约必须在同一 PR 变更。存储能力目前只经 CLI 暴露，尚未进入 HTTP API。
+`api/openapi.yaml` 是 HTTP 行为的公开合同。Handler 与契约必须在同一 PR 变更。读路径已进入 HTTP API；写入仍只经 CLI。
 
 ## 目标采集路径
 

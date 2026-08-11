@@ -39,6 +39,15 @@ type EventRecord struct {
 // ErrRunNotFound reports a run id with no matching row.
 var ErrRunNotFound = errors.New("run not found")
 
+// runSelect is shared by every read of runs so the column order that
+// scanRunSummary depends on cannot drift between queries.
+const runSelect = `
+	SELECT r.id, r.source_id, s.name, r.trigger, r.status, r.started_at,
+	       COALESCE(r.finished_at, ''), r.imported_count, r.duplicate_count,
+	       r.failed_count, r.attempt, COALESCE(r.last_error, '')
+	FROM runs r
+	JOIN sources s ON s.id = r.source_id`
+
 // StartRun opens a run in the running state and returns its id.
 func (s *Store) StartRun(ctx context.Context, sourceID int64, trigger string) (int64, error) {
 	now := record.Now()
@@ -223,14 +232,7 @@ func (s *Store) ListRuns(ctx context.Context, limit int) ([]RunSummary, error) {
 		limit = 20
 	}
 
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT r.id, r.source_id, s.name, r.trigger, r.status, r.started_at,
-		       COALESCE(r.finished_at, ''), r.imported_count, r.duplicate_count,
-		       r.failed_count, r.attempt, COALESCE(r.last_error, '')
-		FROM runs r
-		JOIN sources s ON s.id = r.source_id
-		ORDER BY r.id DESC
-		LIMIT ?`, limit)
+	rows, err := s.db.QueryContext(ctx, runSelect+` ORDER BY r.id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list runs: %w", err)
 	}
@@ -252,13 +254,7 @@ func (s *Store) ListRuns(ctx context.Context, limit int) ([]RunSummary, error) {
 
 // GetRun returns one run with its events in chronological order.
 func (s *Store) GetRun(ctx context.Context, runID int64) (RunSummary, []EventRecord, error) {
-	row := s.db.QueryRowContext(ctx, `
-		SELECT r.id, r.source_id, s.name, r.trigger, r.status, r.started_at,
-		       COALESCE(r.finished_at, ''), r.imported_count, r.duplicate_count,
-		       r.failed_count, r.attempt, COALESCE(r.last_error, '')
-		FROM runs r
-		JOIN sources s ON s.id = r.source_id
-		WHERE r.id = ?`, runID)
+	row := s.db.QueryRowContext(ctx, runSelect+` WHERE r.id = ?`, runID)
 
 	summary, err := scanRunSummary(row)
 	if errors.Is(err, sql.ErrNoRows) {

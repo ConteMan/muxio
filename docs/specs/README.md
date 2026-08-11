@@ -8,6 +8,7 @@
 | [002](002-storage-foundation.md) | 存储地基与幂等导入 | 已实现 |
 | [003](003-runs-and-logging.md) | 运行记录与结构化日志 | 已实现 |
 | [004](004-configuration.md) | 配置系统 | 已实现 |
+| [005](005-read-api.md) | 只读 HTTP API | 已实现 |
 
 新增规格复制 [template.md](template.md)，编号递增。
 
