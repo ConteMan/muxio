@@ -10,6 +10,7 @@ cmd/muxio
     → version
     → serve
       → internal/store/sqlite     opened for the process lifetime
+      → internal/webui            embedded panel, serves unmatched paths
       → internal/api
         → GET /healthz                        process liveness
         → GET /readyz                         storage reachability
@@ -50,7 +51,11 @@ source configuration
 
 ## Web 边界
 
-`web/` 与 Go 核心同仓，但独立构建、运行和发布。它只能消费 `/api/v1`，不得读取 SQLite、本地文件或 Go 内部类型。当前尚未创建前端工具链，避免未使用依赖提前老化。
+`web/` 与 Go 核心同仓，是独立工程：独立依赖、构建、类型检查与测试。它只能消费 `/api/v1`，不得读取 SQLite、本地文件或 Go 内部类型。
+
+构建产物输出到 `internal/webui/assets/` 并提交进仓库，随二进制嵌入交付（[ADR-007](decisions/007-embedded-web-ui.md)）。因此 `go build` 不需要 Node，而改动前端后必须重建并提交产物——`selftest` 会校验产物与源码一致。
+
+客户端类型由 `openapi-typescript` 从 `api/openapi.yaml` 生成，门禁校验其与合同同步。
 
 ## 文档控制面
 

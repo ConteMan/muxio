@@ -10,6 +10,7 @@
 | [004](004-configuration.md) | 配置系统 | 已实现 |
 | [005](005-read-api.md) | 只读 HTTP API | 已实现 |
 | [006](006-config-write-api.md) | 配置写入 API | 已实现 |
+| [007](007-web-observation.md) | 前端工具链与观察面板 | 已实现 |
 
 新增规格复制 [template.md](template.md)，编号递增。
 

@@ -32,6 +32,10 @@ go run ./cmd/muxio version
 go run ./cmd/muxio serve
 ```
 
+Opening the listen address in a browser gives you the panel: run history, run
+detail, and settings. It ships inside the binary, so there is nothing extra to
+run.
+
 Verify from another terminal. `/readyz` reflects database reachability, while
 `/healthz` only reports that the process is alive:
 
@@ -85,10 +89,11 @@ make check
 - `cmd/muxio/`: entry point for the Go binary.
 - `internal/`: core implementation, not a public SDK.
 - `api/openapi.yaml`: public contract between the core and Web.
-- `web/`: boundary for the independent Web project.
 - `docs/`: design, ADRs, roadmap, and specs.
 - `scripts/selftest.sh`: shared local and CI quality gate.
 - `scripts/status.sh`: `make status`, global progress and pending decisions.
+- `web/`: panel source; its build output in `internal/webui/assets/` is embedded
+  into the binary.
 
 See the [project map](docs/MAP.md) and [architecture](docs/design/architecture.md) for details. The durable project documents are currently maintained in Chinese.
 
