@@ -72,6 +72,48 @@ for script in scripts/*.sh; do
   test -x "$script" || { echo "script is not executable: $script"; failed=1; }
 done
 
+step "embedded web panel"
+# The panel ships inside the binary (ADR-007), so a missing or stale build is a
+# release defect rather than a local inconvenience.
+if [ ! -s internal/webui/assets/index.html ]; then
+  echo "internal/webui/assets/index.html is missing or empty"
+  echo "run: npm --prefix web ci && npm --prefix web run build"
+  failed=1
+elif [ -d web/node_modules ]; then
+  # Rebuilding is the only way to prove the committed assets match the source.
+  if npm --prefix web run build >/dev/null 2>&1; then
+    if ! git diff --quiet -- internal/webui/assets; then
+      echo "internal/webui/assets is out of date; rebuild and commit it"
+      git diff --stat -- internal/webui/assets
+      failed=1
+    fi
+  else
+    echo "web build failed"
+    npm --prefix web run build 2>&1 | tail -20
+    failed=1
+  fi
+
+  # Generated client types must match the contract they were generated from.
+  if npm --prefix web run api:generate >/dev/null 2>&1; then
+    if ! git diff --quiet -- web/src/api/schema.d.ts; then
+      echo "web/src/api/schema.d.ts is out of date with api/openapi.yaml"
+      failed=1
+    fi
+  else
+    echo "openapi type generation failed"
+    failed=1
+  fi
+
+  if ! npm --prefix web run typecheck >/dev/null 2>&1; then
+    echo "web typecheck failed"
+    npm --prefix web run typecheck 2>&1 | tail -20
+    failed=1
+  fi
+else
+  echo "   skipping rebuild and type checks: web/node_modules is absent"
+  echo "   run 'npm --prefix web ci' to enable them locally; CI always runs them"
+fi
+
 step "go.mod is tidy"
 go mod tidy -diff || failed=1
 
