@@ -32,12 +32,15 @@ go run ./cmd/muxio version
 go run ./cmd/muxio serve
 ```
 
-另一个终端验证：
+另一个终端验证。`/readyz` 反映数据库是否可达，`/healthz` 只表示进程存活：
 
 ```sh
-curl http://127.0.0.1:8080/healthz
-curl http://127.0.0.1:8080/api/v1/status
+curl http://127.0.0.1:8080/readyz
+curl http://127.0.0.1:8080/api/v1/runs
+curl http://127.0.0.1:8080/api/v1/config
 ```
+
+`/api/v1` 是客户端读取 Muxio 数据的唯一通道，接口合同见 [api/openapi.yaml](api/openapi.yaml)。
 
 导入记录并确认重复导入不会产生重复数据：
 

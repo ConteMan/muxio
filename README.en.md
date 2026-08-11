@@ -32,12 +32,17 @@ go run ./cmd/muxio version
 go run ./cmd/muxio serve
 ```
 
-Verify from another terminal:
+Verify from another terminal. `/readyz` reflects database reachability, while
+`/healthz` only reports that the process is alive:
 
 ```sh
-curl http://127.0.0.1:8080/healthz
-curl http://127.0.0.1:8080/api/v1/status
+curl http://127.0.0.1:8080/readyz
+curl http://127.0.0.1:8080/api/v1/runs
+curl http://127.0.0.1:8080/api/v1/config
 ```
+
+`/api/v1` is the only way a client may read Muxio's data; the contract lives in
+[api/openapi.yaml](api/openapi.yaml).
 
 Import records and confirm that repeating an import creates no duplicates:
 
