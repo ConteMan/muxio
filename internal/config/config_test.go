@@ -219,8 +219,8 @@ func TestCreateRefusesToClobber(t *testing.T) {
 	}
 }
 
-// The point of the modification-time check: a settings UI must not silently
-// overwrite an edit someone made by hand in the meantime.
+// The point of the fingerprint check: a settings UI must not silently overwrite
+// an edit someone made by hand in the meantime.
 func TestWriteDetectsConcurrentEdit(t *testing.T) {
 	path := writeConfig(t, Render(Default()))
 
@@ -230,19 +230,17 @@ func TestWriteDetectsConcurrentEdit(t *testing.T) {
 	}
 
 	// Someone else edits the file after we read it.
-	later := time.Now().Add(2 * time.Second)
-	if err := os.WriteFile(path, []byte(Render(Default())), filePerm); err != nil {
+	other := Default()
+	other.Retention.RunEventDays = 3
+	if err := os.WriteFile(path, []byte(Render(other)), filePerm); err != nil {
 		t.Fatalf("rewrite: %v", err)
-	}
-	if err := os.Chtimes(path, later, later); err != nil {
-		t.Fatalf("chtimes: %v", err)
 	}
 
 	updated, err := Set(loaded.Config, "log.level", "debug")
 	if err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if err := Write(path, updated, loaded.ModTime); !errors.Is(err, ErrConflict) {
+	if err := Write(path, updated, loaded.Fingerprint); !errors.Is(err, ErrConflict) {
 		t.Fatalf("err = %v, want ErrConflict", err)
 	}
 
@@ -251,8 +249,79 @@ func TestWriteDetectsConcurrentEdit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if reloaded.Config.Log.Level != DefaultLogLevel {
-		t.Fatalf("level = %q, the concurrent edit was overwritten", reloaded.Config.Log.Level)
+	if reloaded.Config.Retention.RunEventDays != 3 {
+		t.Fatalf("the concurrent edit was overwritten: %+v", reloaded.Config)
+	}
+}
+
+// A rewrite that produces identical bytes is not a conflict: nothing was lost.
+func TestWriteToleratesIdenticalRewrite(t *testing.T) {
+	path := writeConfig(t, Render(Default()))
+
+	loaded, err := Load(path, emptyEnv)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	// A backup tool rewrites the same bytes, changing only the timestamp.
+	if err := os.WriteFile(path, []byte(Render(Default())), filePerm); err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+
+	updated, err := Set(loaded.Config, "log.level", "debug")
+	if err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if err := Write(path, updated, loaded.Fingerprint); err != nil {
+		t.Fatalf("an identical rewrite was treated as a conflict: %v", err)
+	}
+}
+
+func TestFingerprintTracksContent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+
+	absent, err := Fingerprint(path)
+	if err != nil {
+		t.Fatalf("Fingerprint: %v", err)
+	}
+	if absent != AbsentFingerprint {
+		t.Fatalf("missing file fingerprint = %q, want %q", absent, AbsentFingerprint)
+	}
+
+	if err := os.WriteFile(path, []byte(Render(Default())), filePerm); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	first, err := Fingerprint(path)
+	if err != nil {
+		t.Fatalf("Fingerprint: %v", err)
+	}
+	if first == AbsentFingerprint {
+		t.Fatal("an existing file reported the absent fingerprint")
+	}
+
+	// Same bytes, same fingerprint.
+	if err := os.WriteFile(path, []byte(Render(Default())), filePerm); err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+	again, err := Fingerprint(path)
+	if err != nil {
+		t.Fatalf("Fingerprint: %v", err)
+	}
+	if again != first {
+		t.Fatalf("identical content changed the fingerprint: %q then %q", first, again)
+	}
+
+	// Different bytes, different fingerprint.
+	changed := Default()
+	changed.Log.Level = "debug"
+	if err := os.WriteFile(path, []byte(Render(changed)), filePerm); err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+	after, err := Fingerprint(path)
+	if err != nil {
+		t.Fatalf("Fingerprint: %v", err)
+	}
+	if after == first {
+		t.Fatal("changed content kept the same fingerprint")
 	}
 }
 
@@ -267,7 +336,7 @@ func TestWriteSucceedsWhenUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if err := Write(path, updated, loaded.ModTime); err != nil {
+	if err := Write(path, updated, loaded.Fingerprint); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 
@@ -285,7 +354,7 @@ func TestWriteRejectsInvalidConfig(t *testing.T) {
 	broken := Default()
 	broken.Server.Addr = "0.0.0.0:8080"
 
-	if err := Write(path, broken, time.Time{}); err == nil {
+	if err := Write(path, broken, ""); err == nil {
 		t.Fatal("an invalid configuration was written")
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {

@@ -147,7 +147,7 @@ func runConfigSet(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "config set: %v\n", err)
 		return exitError
 	}
-	if err := config.Write(loaded.Path, updated, loaded.ModTime); err != nil {
+	if err := config.Write(loaded.Path, updated, loaded.Fingerprint); err != nil {
 		_, _ = fmt.Fprintf(stderr, "config set: %v\n", err)
 		return exitError
 	}
@@ -179,6 +179,19 @@ func fileConfig(loaded config.Loaded) (config.Config, error) {
 		}
 	}
 	return result, nil
+}
+
+// saveConfig persists a configuration, refusing the write when the file no
+// longer matches the fingerprint the edit was based on.
+func saveConfig(cfg config.Config, expectedFingerprint string) error {
+	if _, err := paths.EnsureConfigDir(); err != nil {
+		return err
+	}
+	configPath, err := paths.ConfigFile()
+	if err != nil {
+		return err
+	}
+	return config.Write(configPath, cfg, expectedFingerprint)
 }
 
 // loadConfig resolves the effective configuration from file and environment.

@@ -84,9 +84,9 @@ type Loaded struct {
 	Path string
 	// Exists reports whether the file was present.
 	Exists bool
-	// ModTime is the file's modification time when read; the zero value when absent.
-	// Writes use it to detect a concurrent edit.
-	ModTime time.Time
+	// Fingerprint identifies the bytes that were read. Writes pass it back to
+	// detect a concurrent edit; see ADR-006.
+	Fingerprint string
 }
 
 // Origin reports where a field's effective value came from.

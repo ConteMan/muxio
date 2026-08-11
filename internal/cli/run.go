@@ -292,6 +292,7 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 			Version:    version.Version,
 			Store:      store,
 			LoadConfig: loadConfig,
+			SaveConfig: saveConfig,
 			Logger:     logger,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
